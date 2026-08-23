@@ -1,79 +1,59 @@
+# os-sing-box-plus
 
-<div align="center">
-  <a href="README.md">中文</a> |
-  <a href="README.US.md">English</a>
-</div>
+Улучшенный community-плагин **sing-box для OPNsense**, основанный на `Opnwall/os-sing-box`.
 
-# OPNsense Community Repository
+Проект сфокусирован только на sing-box и развивается как самостоятельная надстройка над исходным плагином Opnwall. Цель — безопасная и воспроизводимая интеграция sing-box с OPNsense: селективная маршрутизация, управление клиентами и интерфейсами, диагностика, метрики, журналирование и контролируемые обновления ядра.
 
-**Community Plugins for OPNsense**
+## Статус
 
-[![OPNsense](https://img.shields.io/badge/OPNsense-26.x-orange)]()
-[![Platform](https://img.shields.io/badge/Platform-amd64-blue)]()
-[![License](https://img.shields.io/badge/License-Multiple-green)]()
-[![GitHub
-Pages](https://img.shields.io/badge/Hosted-GitHub%20Pages-brightgreen)]()
+Проект находится на этапе bootstrap/refactoring. Текущая кодовая база импортирована из `Opnwall/OPNsense-repo` и будет постепенно переведена на архитектуру `os-sing-box-plus` без потери совместимости с OPNsense.
 
-这是一个面向 **OPNsense amd64**的社区软件仓库，为 OPNsense 提供代理集成、DNS 增强、动态 DNS、中文汉化、系统诊断和网络工具等扩展。。
+## Основные цели
 
-主要包含：
+- RU/EN интерфейс;
+- режимы перехвата: локальный, выбранные клиенты, выбранные интерфейсы, вся LAN;
+- правила `PROXY` / `DIRECT` / `REJECT` для доменов и наборов правил;
+- клиенты по IP, CIDR, диапазону и OPNsense Alias, включая инверсию;
+- выбор обслуживаемых интерфейсов и VLAN;
+- безопасное управление DNS interception и FakeIP;
+- health/deep/domain-policy проверки и аварийный rollback;
+- управление логами, ротацией и хранением;
+- **метрики** для Prometheus/совместимых систем мониторинга;
+- Gotify-уведомления о переходах состояния;
+- воспроизводимые сборки с фиксированной версией Vincent/reF1nd core и SHA256;
+- сохранение пользовательской конфигурации при обновлении пакета.
 
--   🌐 代理插件（Mihomo、sing-box）
--   🛡 DNS 增强
--   ☁️ DDNS
--   🌏 中文语言包
--   🔧 网络工具
--   📊 系统诊断插件
+## Ветки
 
-## 安装方法
+- `main` — стабильная production-ветка;
+- `develop` — интеграция и тестирование;
+- `upstream-main` — неизменённое зеркало `Opnwall/main` для переноса upstream-обновлений;
+- `feature/*` — отдельные задачи разработки.
 
-``` sh
-fetch -o /usr/local/etc/pkg/repos/opnwall.conf \
-  https://opnwall.github.io/OPNsense-repo/opnwall.conf
+## Структура
 
-pkg update -f
+```text
+src/os-sing-box/        исходная кодовая база плагина и package build
+docs/                   архитектура, дорожная карта и проектные решения
+.github/                 CI и шаблоны разработки
 ```
 
-然后进入：
+Переименование внутреннего package/source tree в `os-sing-box-plus` будет выполнено отдельной миграцией после проектирования upgrade path с `os-sing-box`, чтобы не ломать существующие установки.
 
-    系统
-    └── 固件
-        └── 插件
+## Upstream и происхождение
 
-安装所有 `os-` 开头的软件包。
+Проект основан на community-плагине `os-sing-box` из репозитория Opnwall и сохраняет совместимость с соответствующей MIT-лицензией. Ядро sing-box и FreeBSD/reF1nd-сборки являются отдельными upstream-компонентами.
 
-## 删除仓库
+- Opnwall: https://github.com/Opnwall/OPNsense-repo
+- sing-box: https://github.com/SagerNet/sing-box
+- Vincent-Loeng/bsd-box: https://github.com/Vincent-Loeng/bsd-box
 
-``` sh
-rm -f /usr/local/etc/pkg/repos/opnwall.conf
-pkg update -f
+## Важное правило разработки
+
+Любое изменение, затрагивающее запуск, DNS, маршрутизацию, PF/PBR, FakeIP или package upgrade, должно проходить:
+
+```text
+backup -> generate/modify -> sing-box check -> restart -> health -> deep probe -> rollback on failure
 ```
 
-不会卸载已经安装的插件。
-
-## 插件列表
-
-| 插件 | 版本 | 描述 |
-| --- | --- | --- |
-| `os-ddclient-opnwall` | 1.0.2 | 增强版 DDClient 替代方案，支持阿里云、腾讯云及 IPv6 接口 |
-| `os-ddns-go` | 1.0.2 | DDNS-Go 动态 DNS |
-| `os-easytier` | 1.0.0 | EasyTier 组网 VPN，支持 WebGUI、动态接口和子网代理 |
-| `os-lang` | 1.0.4 | 中文汉化工具 |
-| `os-lucky` | 1.0.2 | Lucky 网络工具箱 |
-| `os-mihomo` | 1.0.2 | Mihomo 代理工具 |
-| `os-pftop` | 1.0.2 | pfTop 诊断工具 |
-| `os-sing-box` | 1.0.2 | sing-box 代理工具 |
-| `os-staticarp` | 1.0.2 | ARP 静态绑定工具 |
-| `os-speedtest` | 1.0.2 | Speedtest 互联网测速工具 |
-| `os-ttyd` | 1.0.2 | ttyd 终端程序 |
-| `os-unboundcustom` | 1.0.2 | Unbound DNS 自定义选项 |
-
-## 插件源码
-
-已发布插件的完整源码位于 [`src/`](src/) 目录。每个 `os-*`目录都是独立项目，可在 OPNsense/FreeBSD 主机上使用项目内的 `build.sh` 编译。
-
-## 许可声明
-源码及其中包含的第三方组件分别遵循各项目附带的许可证和声明。
-
-##  免责声明
-本仓库为社区项目，与 OPNsense 官方无任何关联，也不提供官方支持。
+Проект не связан с Deciso или официальным проектом OPNsense.

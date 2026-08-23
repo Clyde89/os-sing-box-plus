@@ -1,8 +1,0 @@
-<acl>
-    <page-system-diagnostics-ttyd>
-        <name>System: Diagnostics: ttyd</name>
-        <patterns>
-            <pattern>diag_ttyd.php*</pattern>
-        </patterns>
-    </page-system-diagnostics-ttyd>
-</acl>

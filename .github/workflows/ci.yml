@@ -1,0 +1,52 @@
+name: Repository checks
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  repository-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify focused source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d src/os-sing-box
+          extra="$(find src -mindepth 1 -maxdepth 1 -type d ! -name os-sing-box -print)"
+          if [ -n "$extra" ]; then
+            echo "Unexpected plugin directories:"
+            printf '%s\n' "$extra"
+            exit 1
+          fi
+
+      - name: Validate JSON files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for path in Path('src/os-sing-box').rglob('*.json'):
+              with path.open('r', encoding='utf-8') as fh:
+                  json.load(fh)
+              print(f'OK {path}')
+          PY
+
+      - name: Check shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            sh -n "$file"
+            echo "OK $file"
+          done < <(find src/os-sing-box -type f \( -name '*.sh' -o -path '*/rc.d/*' \) -print0)

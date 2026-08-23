@@ -1,8 +1,0 @@
-<acl>
-    <page-services-ddnsgo>
-        <name>Services: DDNS-Go</name>
-        <patterns>
-            <pattern>services_ddnsgo.php*</pattern>
-        </patterns>
-    </page-services-ddnsgo>
-</acl>
