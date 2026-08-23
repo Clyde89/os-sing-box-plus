@@ -6,16 +6,20 @@
 - [x] Создать `upstream-main` как зеркало исходного Opnwall tree.
 - [x] Создать `develop`.
 - [x] Создать `feature/repository-bootstrap`.
-- [ ] Очистить рабочую ветку от остальных community-плагинов.
-- [ ] Добавить документацию и минимальный CI.
+- [x] Очистить рабочую ветку от остальных community-плагинов.
+- [x] Добавить документацию и минимальный CI.
 
 ## Этап 1 — восстановление production baseline
 
 - [x] Исправить создание `/var/log/sing-box` при запуске.
 - [x] Проверить artificial self-heal.
 - [x] Проверить реальный reboot.
-- [ ] Устранить post-reboot внутренний DNS egress fault к `8.8.8.8:443` через `vpn-nl`.
-- [ ] Перенести подтверждённые исправления в исходники plugin package.
+- [x] Локализовать post-reboot DNS fault до policy-bound DoH transport.
+- [x] Разорвать цикл `vpn outbound -> vpn-dns -> vpn outbound` отдельным DNS bootstrap outbound.
+- [x] Проверить A/FakeIP, HTTPS RR, VPN egress и реальный доступ с клиента после restart.
+- [x] Перенести log self-heal и DNS bootstrap архитектуру в исходники/документацию plus-версии.
+- [ ] Выполнить повторный reboot-test уже с DNS bootstrap fix.
+- [ ] Добавить отдельный DNS-upstream health probe, чтобы `deep` не давал false-positive `OK`.
 
 ## Этап 2 — reproducible core
 
@@ -29,6 +33,7 @@
 - [ ] MVC/config.xml model.
 - [ ] Generated runtime config.
 - [ ] Atomic apply/rollback.
+- [ ] Проверка циклических DNS detour/domain_resolver зависимостей до apply.
 - [ ] Миграция существующего `os-sing-box` без потери настроек.
 
 ## Этап 4 — policy frontend
@@ -43,9 +48,11 @@
 ## Этап 5 — observability
 
 - [ ] Local/deep/end-to-end health page.
+- [ ] Policy-bound DNS upstream probe.
 - [ ] Persistent transition history.
 - [ ] Gotify transition notifications.
 - [ ] Prometheus-compatible metrics endpoint.
+- [ ] DNS-upstream availability/latency metrics.
 - [ ] Gateway latency/loss, service/DNS/TUN/FakeIP/PBR/egress metrics.
 - [ ] Optional traffic/connection metrics from safe sing-box API source.
 

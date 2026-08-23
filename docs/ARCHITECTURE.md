@@ -53,17 +53,70 @@ model/config.xml
 
 DNS interception и traffic interception должны управляться отдельно.
 
+## DNS bootstrap для policy-bound DoH
+
+Если выбранные домены разрешаются через DoH, который сам должен идти через policy-bound direct outbound, нельзя создавать циклическую зависимость вида:
+
+```text
+vpn outbound -> domain_resolver=vpn-dns -> vpn-dns.detour=vpn outbound
+```
+
+На OPNsense 26.7 / FreeBSD 15.1 такой путь был воспроизведён как runtime failure `no route to host` для TCP соединения к DoH endpoint при том, что системный bound connect и PF `route-to` работали.
+
+Подтверждённый рабочий шаблон использует отдельный bootstrap outbound без `domain_resolver`:
+
+```json
+{
+  "dns": {
+    "servers": [
+      {
+        "type": "https",
+        "tag": "vpn-dns",
+        "server": "8.8.8.8",
+        "server_port": 443,
+        "path": "/dns-query",
+        "tls": {
+          "enabled": true,
+          "server_name": "dns.google"
+        },
+        "detour": "vpn-dns-bootstrap"
+      }
+    ]
+  },
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "vpn",
+      "inet4_bind_address": "POLICY_SOURCE_IP",
+      "domain_resolver": "vpn-dns"
+    },
+    {
+      "type": "direct",
+      "tag": "vpn-dns-bootstrap",
+      "inet4_bind_address": "POLICY_SOURCE_IP"
+    }
+  ]
+}
+```
+
+Bootstrap outbound должен наследовать тот же policy source/interface selection, но не должен ссылаться обратно на DNS server, который использует его как detour.
+
+Генератор конфигурации обязан проверять такие циклы до применения настроек.
+
 ## Health
 
 Минимальные уровни диагностики:
 
 1. local: process/listener/TUN/route;
 2. policy: DNS selective/direct и FakeIP;
-3. egress: реальный выход через выбранный gateway;
-4. end-to-end: доменный запрос через фактический policy path;
-5. client path: проверка DNS redirect -> listener для выбранного клиента.
+3. DNS upstream: реальный запрос через каждый configured policy-bound DNS transport;
+4. egress: реальный выход через выбранный gateway;
+5. end-to-end: доменный запрос через фактический policy path;
+6. client path: проверка DNS redirect -> listener для выбранного клиента.
 
 Состояние последних переходов должно переживать reboot.
+
+`deep` не должен считаться успешным только по факту доступности gateway/egress: policy-bound DoH transport проверяется отдельно, чтобы исключить ложноположительный `OK`.
 
 ## Метрики
 
@@ -74,6 +127,8 @@ DNS interception и traffic interception должны управляться о�
 - `singbox_plus_service_up`;
 - `singbox_plus_dns_tcp_up`;
 - `singbox_plus_dns_udp_up`;
+- `singbox_plus_dns_upstream_up`;
+- `singbox_plus_dns_upstream_latency_ms`;
 - `singbox_plus_tun_up`;
 - `singbox_plus_fakeip_route_up`;
 - `singbox_plus_gateway_up`;
@@ -98,6 +153,14 @@ DNS interception и traffic interception должны управляться о�
 - compression;
 - newsyslog integration;
 - безопасный просмотр/очистка из GUI.
+
+Service layer обязан создать parent directory и log file до `sing-box check`, потому что внутренний logger sing-box не обязан создавать отсутствующий parent directory.
+
+Базовый путь plus-версии:
+
+```text
+/var/log/sing-box/sing-box.log
+```
 
 ## Package build
 

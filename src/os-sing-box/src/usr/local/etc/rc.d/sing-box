@@ -12,7 +12,8 @@ name="sing_box"
 rcvar="sing_box_enable"
 
 pidfile="/var/run/sing-box.pid"
-logfile="/var/log/sing-box.log"
+logdir="/var/log/sing-box"
+logfile="${logdir}/sing-box.log"
 command="/usr/local/bin/sing-box"
 config="/usr/local/etc/sing-box/config.json"
 
@@ -41,8 +42,21 @@ wait_for_exit() {
     return 1
 }
 
+ensure_log_path() {
+    install -d -o root -g wheel -m 750 "$logdir" || return 1
+    touch "$logfile" || return 1
+    chown root:wheel "$logfile" || return 1
+    chmod 640 "$logfile" || return 1
+}
+
 sing_box_start() {
     echo "Starting sing-box..."
+
+    if ! ensure_log_path; then
+        echo "Unable to prepare sing-box log path: $logfile"
+        return 1
+    fi
+
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
         echo "sing-box is already running."
         return 1
