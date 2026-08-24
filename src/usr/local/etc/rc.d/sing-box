@@ -50,30 +50,30 @@ ensure_log_path() {
 }
 
 sing_box_start() {
-    echo "Starting sing-box..."
+    echo "Запуск sing-box..."
 
     if ! ensure_log_path; then
-        echo "Unable to prepare sing-box log path: $logfile"
+        echo "Не удалось подготовить файл журнала: $logfile"
         return 1
     fi
 
     if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-        echo "sing-box is already running."
+        echo "Служба sing-box уже запущена."
         return 1
     fi
 
     if service mihomo status >/dev/null 2>&1; then
-        echo "Refusing to start sing-box: mihomo is already running and owns transparent routing."
+        echo "Запуск sing-box отклонён: mihomo уже использует прозрачную маршрутизацию."
         return 1
     fi
 
     if [ ! -x "$command" ] || [ ! -f "$config" ]; then
-        echo "sing-box binary or configuration is missing."
+        echo "Исполняемый файл sing-box или рабочая конфигурация отсутствуют."
         return 1
     fi
 
     if ! "$command" check -c "$config" >> "$logfile" 2>&1; then
-        echo "sing-box configuration validation failed."
+        echo "Конфигурация sing-box не прошла проверку."
         return 1
     fi
 
@@ -81,32 +81,36 @@ sing_box_start() {
     echo $! > "$pidfile"
     sleep 1
     if ! kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-        echo "sing-box exited during startup."
+        echo "Процесс sing-box завершился во время запуска."
         rm -f "$pidfile"
         return 1
     fi
+
     timeout=20
     while [ "$timeout" -gt 0 ]; do
         if ifconfig tun_singbox >/dev/null 2>&1; then
             break
         fi
         if ! kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-            echo "sing-box exited before creating tun_singbox."
+            echo "Процесс sing-box завершился до создания tun_singbox."
             rm -f "$pidfile"
             return 1
         fi
         sleep 1
         timeout=$((timeout - 1))
     done
+
     if ! ifconfig tun_singbox >/dev/null 2>&1; then
-        echo "sing-box did not create tun_singbox within 20 seconds."
+        echo "Интерфейс tun_singbox не был создан за 20 секунд."
         return 1
     fi
-    echo "Started with PID $(cat "$pidfile")"
+
+    echo "Служба запущена, PID $(cat "$pidfile")."
 }
 
 sing_box_stop() {
-    echo "Stopping sing-box..."
+    echo "Остановка sing-box..."
+
     if [ -f "$pidfile" ]; then
         pid=$(cat "$pidfile")
         if kill -0 "$pid" 2>/dev/null; then
@@ -115,23 +119,23 @@ sing_box_stop() {
                 sing-box|*/sing-box)
                     if kill "$pid" && wait_for_exit "$pid" 10; then
                         rm -f "$pidfile"
-                        echo "Stopped."
+                        echo "Служба остановлена."
                     else
-                        echo "Timed out waiting for sing-box to stop."
+                        echo "Превышено время ожидания остановки sing-box."
                         return 1
                     fi
                     ;;
                 *)
-                    echo "PID file points to a different process: $pid ($proc_comm)."
+                    echo "PID-файл указывает на другой процесс: $pid ($proc_comm)."
                     return 1
                     ;;
             esac
         else
             rm -f "$pidfile"
-            echo "Stale PID file removed."
+            echo "Устаревший PID-файл удалён."
         fi
     else
-        echo "sing-box is not running (no pidfile)."
+        echo "Служба sing-box не запущена: PID-файл отсутствует."
     fi
 }
 
@@ -139,16 +143,16 @@ sing_box_status() {
     if [ -f "$pidfile" ]; then
         pid=$(cat "$pidfile")
         if kill -0 "$pid" 2>/dev/null; then
-            echo "sing-box is running as PID $pid."
+            echo "Служба sing-box работает, PID $pid."
             return 0
-        else
-            echo "PID file found but process not running."
-            return 1
         fi
-    else
-        echo "sing-box is not running."
+
+        echo "PID-файл найден, но процесс sing-box не работает."
         return 1
     fi
+
+    echo "Служба sing-box не запущена."
+    return 1
 }
 
 run_rc_command "$1"
