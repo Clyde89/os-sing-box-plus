@@ -13,11 +13,8 @@ echo "===> Configuring os-sing-box"
 
 mkdir -p /etc/rc.conf.d
 echo 'sing_box_enable="YES"' > /etc/rc.conf.d/sing_box
-touch /var/log/sing-box.log /var/log/sing-box_sub.log 2>/dev/null || true
-chmod 0755 /usr/local/etc/sing-box/sub/sub.sh 2>/dev/null || true
-rm -f /usr/local/www/services_sub.php /usr/local/www/status_sing_box_logs.php
+touch /var/log/sing-box.log 2>/dev/null || true
 rm -f /usr/local/www/services_sing_box.php /usr/local/www/status_sing_box.php
-rm -f /usr/local/www/services_singboxsub.php /usr/local/www/status_singboxsub_log.php
 rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cache.json
 rm -rf /usr/local/opnsense/mvc/app/models/OPNsense/sing-box
 
@@ -28,15 +25,13 @@ elif command -v uuidgen >/dev/null 2>&1; then
 else
     CLASH_API_SECRET="$(date | cksum | awk '{print $1}')"
 fi
-for secret_file in /usr/local/etc/sing-box/config.json /usr/local/etc/sing-box/sub/template.json; do
-    if [ -f "$secret_file" ]; then
-        sed -i '' "s/\"secret\": \"CHANGE_ME\"/\"secret\": \"${CLASH_API_SECRET}\"/" "$secret_file" 2>/dev/null || true
-        sed -i '' "s/\"secret\": \"\"/\"secret\": \"${CLASH_API_SECRET}\"/" "$secret_file" 2>/dev/null || true
-        chmod 0600 "$secret_file" 2>/dev/null || true
-    fi
-done
+secret_file=/usr/local/etc/sing-box/config.json
+if [ -f "$secret_file" ]; then
+    sed -i '' "s/\"secret\": \"CHANGE_ME\"/\"secret\": \"${CLASH_API_SECRET}\"/" "$secret_file" 2>/dev/null || true
+    sed -i '' "s/\"secret\": \"\"/\"secret\": \"${CLASH_API_SECRET}\"/" "$secret_file" 2>/dev/null || true
+    chmod 0600 "$secret_file" 2>/dev/null || true
+fi
 chmod 0644 /usr/local/etc/sing-box/config.json 2>/dev/null || true
-chmod 0600 /usr/local/etc/sing-box/sub/env /usr/local/etc/sing-box/sub/template.json 2>/dev/null || true
 
 find_tun_interface() {
     awk '
