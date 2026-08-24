@@ -2,7 +2,7 @@
 set -eu
 
 PKG_NAME="${PKG_NAME:-os-sing-box}"
-VERSION="${VERSION:-1.0.2}"
+VERSION="${VERSION:-1.1.0}"
 ORIGIN="${ORIGIN:-opnsense/os-sing-box}"
 COMMENT="${COMMENT:-Интеграция sing-box с OPNsense}"
 MAINTAINER="${MAINTAINER:-https://github.com/Clyde89/os-sing-box-plus/issues}"
