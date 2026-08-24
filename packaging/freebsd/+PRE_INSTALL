@@ -26,7 +26,7 @@ if [ -n "$installed_version" ]; then
     comparison="$(pkg version -t "$installed_version" "$LEGACY_CUTOFF_VERSION" 2>/dev/null || true)"
 fi
 
-if [ "$comparison" = "<" ]; then
+if [ "$comparison" = "<" ] || [ "$comparison" = "=" ]; then
     echo "===> Сохраняется состояние OPNsense для миграции legacy-пакета os-sing-box $installed_version"
     prepare_migration_dir
     printf '%s\n' "$installed_version" > "$LEGACY_VERSION_FILE"
