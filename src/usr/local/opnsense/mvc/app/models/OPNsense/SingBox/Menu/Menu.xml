@@ -1,7 +1,7 @@
 <menu>
     <VPN>
-        <ProxySuite VisibleName="Proxy Suite" cssClass="fa fa-lock fa-fw">
-            <SingBox VisibleName="Sing-Box" order="30" url="/sing-box.php"/>
+        <ProxySuite VisibleName="Прокси" cssClass="fa fa-lock fa-fw">
+            <SingBox VisibleName="sing-box" order="30" url="/sing-box.php"/>
         </ProxySuite>
     </VPN>
 </menu>
