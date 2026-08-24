@@ -11,6 +11,11 @@ SING_BOX_LOG="${SING_BOX_LOG_DIR}/sing-box.log"
 RC_CONF_FILE="/etc/rc.conf.d/sing_box"
 MIGRATION_DIR="/var/db/os-sing-box"
 MIGRATION_FILE="${MIGRATION_DIR}/config.json.upgrade"
+LEGACY_CONFIG_SNAPSHOT="${MIGRATION_DIR}/config.xml.legacy"
+LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
+LEGACY_MIGRATOR="/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php"
+legacy_migration_processed=0
+legacy_migration_failed=0
 
 echo "===> Настраивается os-sing-box"
 
@@ -28,8 +33,6 @@ if [ -f "$MIGRATION_FILE" ]; then
     echo "===> Восстанавливается пользовательская конфигурация sing-box после обновления"
     install -d -o root -g wheel -m 0700 "$SING_BOX_DIR"
     install -o root -g wheel -m 0600 "$MIGRATION_FILE" "$SING_BOX_CONFIG"
-    rm -f "$MIGRATION_FILE"
-    rmdir "$MIGRATION_DIR" 2>/dev/null || true
 elif [ ! -f "$SING_BOX_CONFIG" ] && [ -f "$SING_BOX_SAMPLE" ]; then
     install -o root -g wheel -m 0600 "$SING_BOX_SAMPLE" "$SING_BOX_CONFIG"
 elif [ -f "$SING_BOX_CONFIG" ]; then
@@ -40,12 +43,36 @@ if [ ! -f "$READINESS_CONFIG" ] && [ -f "$READINESS_SAMPLE" ]; then
     install -o root -g wheel -m 0600 "$READINESS_SAMPLE" "$READINESS_CONFIG"
 fi
 
+if [ -f "$LEGACY_VERSION_FILE" ] && [ -f "$LEGACY_CONFIG_SNAPSHOT" ]; then
+    legacy_version="$(cat "$LEGACY_VERSION_FILE" 2>/dev/null || true)"
+    echo "===> Восстанавливаются объекты OPNsense после обновления legacy-пакета ${legacy_version:-неизвестной версии}"
+    if [ -r "$LEGACY_MIGRATOR" ] && /usr/local/bin/php "$LEGACY_MIGRATOR" "$LEGACY_CONFIG_SNAPSHOT"; then
+        legacy_migration_processed=1
+    else
+        legacy_migration_failed=1
+        echo "Ошибка: не удалось восстановить объекты OPNsense из legacy-конфигурации; снимок сохранён в $LEGACY_CONFIG_SNAPSHOT" >&2
+    fi
+fi
+
 rm -f /usr/local/www/services_sing_box.php /usr/local/www/status_sing_box.php
 rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cache.json
 rm -rf /usr/local/opnsense/mvc/app/models/OPNsense/sing-box
 
 service configd restart >/dev/null 2>&1 || true
 
-if grep -q 'sing_box_enable="YES"' "$RC_CONF_FILE" 2>/dev/null; then
+if grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE" 2>/dev/null; then
     service sing-box restart >/dev/null 2>&1 || true
+fi
+
+if [ "$legacy_migration_processed" -eq 1 ]; then
+    configctl filter reload >/dev/null 2>&1 || true
+fi
+
+if [ "$legacy_migration_failed" -eq 0 ]; then
+    rm -f "$MIGRATION_FILE" "$LEGACY_CONFIG_SNAPSHOT" "$LEGACY_VERSION_FILE"
+    rmdir "$MIGRATION_DIR" 2>/dev/null || true
+fi
+
+if [ "$legacy_migration_failed" -ne 0 ]; then
+    exit 1
 fi
