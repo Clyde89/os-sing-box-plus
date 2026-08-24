@@ -1,9 +1,9 @@
 #!/bin/sh
 
-echo "===> Refreshing OPNsense menu cache"
+echo "===> Обновляется кэш меню OPNsense"
 rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cache.json
 rm -f /usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
 service configd restart >/dev/null 2>&1 || true
 
-echo "===> Preserving user sing-box configuration"
+echo "===> Пользовательская конфигурация sing-box сохранена"
 rm -f /usr/local/etc/sing-box/config.json.sample
