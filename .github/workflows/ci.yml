@@ -103,7 +103,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tests/migrate-legacy.sh
+          sh tests/migrate-legacy.sh
 
       - name: Установка PHP CLI
         shell: bash
