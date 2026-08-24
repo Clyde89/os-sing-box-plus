@@ -4,6 +4,11 @@ CONFIG_FILE="/conf/config.xml"
 TMP_FILE="/tmp/config.xml.tmp"
 TUN_DEVICE="tun_singbox"
 RULE_UUID="762b3ec8-79c2-48b4-9793-c653bb3d2265"
+SING_BOX_DIR="/usr/local/etc/sing-box"
+SING_BOX_CONFIG="${SING_BOX_DIR}/config.json"
+SING_BOX_SAMPLE="${SING_BOX_DIR}/config.json.sample"
+SING_BOX_LOG_DIR="/var/log/sing-box"
+SING_BOX_LOG="${SING_BOX_LOG_DIR}/sing-box.log"
 
 pkg_timestamp() {
     date | sed 's/[^A-Za-z0-9]/_/g'
@@ -13,25 +18,18 @@ echo "===> Configuring os-sing-box"
 
 mkdir -p /etc/rc.conf.d
 echo 'sing_box_enable="YES"' > /etc/rc.conf.d/sing_box
-touch /var/log/sing-box.log 2>/dev/null || true
+install -d -o root -g wheel -m 0750 "$SING_BOX_LOG_DIR"
+touch "$SING_BOX_LOG"
+chown root:wheel "$SING_BOX_LOG"
+chmod 0640 "$SING_BOX_LOG"
+
+if [ ! -f "$SING_BOX_CONFIG" ] && [ -f "$SING_BOX_SAMPLE" ]; then
+    install -o root -g wheel -m 0600 "$SING_BOX_SAMPLE" "$SING_BOX_CONFIG"
+fi
+
 rm -f /usr/local/www/services_sing_box.php /usr/local/www/status_sing_box.php
 rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cache.json
 rm -rf /usr/local/opnsense/mvc/app/models/OPNsense/sing-box
-
-if command -v openssl >/dev/null 2>&1; then
-    CLASH_API_SECRET="$(openssl rand -hex 24)"
-elif command -v uuidgen >/dev/null 2>&1; then
-    CLASH_API_SECRET="$(uuidgen | tr -d '-')"
-else
-    CLASH_API_SECRET="$(date | cksum | awk '{print $1}')"
-fi
-secret_file=/usr/local/etc/sing-box/config.json
-if [ -f "$secret_file" ]; then
-    sed -i '' "s/\"secret\": \"CHANGE_ME\"/\"secret\": \"${CLASH_API_SECRET}\"/" "$secret_file" 2>/dev/null || true
-    sed -i '' "s/\"secret\": \"\"/\"secret\": \"${CLASH_API_SECRET}\"/" "$secret_file" 2>/dev/null || true
-    chmod 0600 "$secret_file" 2>/dev/null || true
-fi
-chmod 0644 /usr/local/etc/sing-box/config.json 2>/dev/null || true
 
 find_tun_interface() {
     awk '
