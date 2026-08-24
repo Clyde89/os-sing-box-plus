@@ -8,4 +8,4 @@ dist/
 *.tar.gz
 *.log
 .env
-src/os-sing-box/src/usr/local/bin/*.xz
+src/usr/local/bin/*.xz
