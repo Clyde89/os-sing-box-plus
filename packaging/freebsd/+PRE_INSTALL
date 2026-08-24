@@ -2,11 +2,37 @@
 set -eu
 
 CONFIG_FILE="/usr/local/etc/sing-box/config.json"
+SYSTEM_CONFIG="/conf/config.xml"
 MIGRATION_DIR="/var/db/os-sing-box"
 MIGRATION_FILE="${MIGRATION_DIR}/config.json.upgrade"
+LEGACY_CONFIG_SNAPSHOT="${MIGRATION_DIR}/config.xml.legacy"
+LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
+LEGACY_CUTOFF_VERSION="1.0.2"
+
+prepare_migration_dir()
+{
+    install -d -o root -g wheel -m 0700 "$MIGRATION_DIR"
+}
 
 if [ -f "$CONFIG_FILE" ]; then
     echo "===> Сохраняется пользовательская конфигурация sing-box перед установкой"
-    install -d -o root -g wheel -m 0700 "$MIGRATION_DIR"
+    prepare_migration_dir
     install -o root -g wheel -m 0600 "$CONFIG_FILE" "$MIGRATION_FILE"
+fi
+
+installed_version="$(pkg query '%v' os-sing-box 2>/dev/null || true)"
+comparison=""
+if [ -n "$installed_version" ]; then
+    comparison="$(pkg version -t "$installed_version" "$LEGACY_CUTOFF_VERSION" 2>/dev/null || true)"
+fi
+
+if [ "$comparison" = "<" ]; then
+    echo "===> Сохраняется состояние OPNsense для миграции legacy-пакета os-sing-box $installed_version"
+    prepare_migration_dir
+    printf '%s\n' "$installed_version" > "$LEGACY_VERSION_FILE"
+    chmod 0600 "$LEGACY_VERSION_FILE"
+
+    if [ -f "$SYSTEM_CONFIG" ]; then
+        install -o root -g wheel -m 0600 "$SYSTEM_CONFIG" "$LEGACY_CONFIG_SNAPSHOT"
+    fi
 fi
