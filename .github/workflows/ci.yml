@@ -26,12 +26,21 @@ jobs:
           test -d packaging/freebsd
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
+          test -f src/usr/local/etc/sing-box/readiness.conf.sample
+          test -f src/usr/local/etc/rc.syshook.d/start/70-sing-box-readiness
+          test -f src/usr/local/sbin/sing-box-readiness
           test ! -e src/usr/local/etc/sing-box/config.json
+          test ! -e src/usr/local/etc/sing-box/readiness.conf
           test ! -e src/usr/bin/sing_box_sub
           test ! -e src/usr/local/www/sing-box_sub.php
           test ! -e src/usr/local/www/sing-box_sub_log.php
           grep -q 'SING_BOX_RELEASE=.*v1.13.13-vincent' build.sh
           grep -q 'SING_BOX_SHA256=' build.sh
+          grep -q '^SING_BOX_READINESS_ENABLE="NO"$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^SING_BOX_READINESS_SOURCE_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^SING_BOX_READINESS_UNDERLAY_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^SING_BOX_READINESS_POLICY_SUFFIX=""$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^SING_BOX_READINESS_E2E_NAME=""$' src/usr/local/etc/sing-box/readiness.conf.sample
           if grep -q '/releases/latest/' build.sh; then
             echo 'Обнаружена плавающая ссылка releases/latest' >&2
             exit 1
@@ -73,7 +82,7 @@ jobs:
           while IFS= read -r -d '' file; do
             sh -n "$file"
             echo "OK $file"
-          done < <(find src packaging -type f \( -name '*.sh' -o -path '*/rc.d/*' -o -name '+PRE_INSTALL' -o -name '+POST_INSTALL' -o -name '+PRE_DEINSTALL' -o -name '+POST_DEINSTALL' \) -print0)
+          done < <(find src packaging -type f \( -name '*.sh' -o -path '*/rc.d/*' -o -path '*/rc.syshook.d/*' -o -path '*/sbin/sing-box-readiness' -o -name '+PRE_INSTALL' -o -name '+POST_INSTALL' -o -name '+PRE_DEINSTALL' -o -name '+POST_DEINSTALL' \) -print0)
 
       - name: Установка PHP CLI
         shell: bash
