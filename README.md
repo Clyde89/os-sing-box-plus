@@ -1,59 +1,95 @@
 # os-sing-box-plus
 
-Улучшенный community-плагин **sing-box для OPNsense**, основанный на `Opnwall/os-sing-box`.
+Community-плагин **sing-box для OPNsense**, развиваемый на базе `Opnwall/os-sing-box`.
 
-Проект сфокусирован только на sing-box и развивается как самостоятельная надстройка над исходным плагином Opnwall. Цель — безопасная и воспроизводимая интеграция sing-box с OPNsense: селективная маршрутизация, управление клиентами и интерфейсами, диагностика, метрики, журналирование и контролируемые обновления ядра.
+Цель проекта — сделать интеграцию sing-box с OPNsense предсказуемой и безопасной: с нормальным жизненным циклом сервиса, policy routing, DNS/FakeIP, диагностикой, автоматическим восстановлением после сетевых событий и воспроизводимой сборкой пакета.
 
-## Статус
+> Проект не является официальной частью OPNsense/Deciso.
 
-Проект находится на этапе bootstrap/refactoring. Текущая кодовая база импортирована из `Opnwall/OPNsense-repo` и будет постепенно переведена на архитектуру `os-sing-box-plus` без потери совместимости с OPNsense.
+## Текущий статус
 
-## Основные цели
+Разработка ведётся и тестируется на **OPNsense 26.7 / FreeBSD 15.1**.
 
-- RU/EN интерфейс;
-- режимы перехвата: локальный, выбранные клиенты, выбранные интерфейсы, вся LAN;
-- правила `PROXY` / `DIRECT` / `REJECT` для доменов и наборов правил;
-- клиенты по IP, CIDR, диапазону и OPNsense Alias, включая инверсию;
-- выбор обслуживаемых интерфейсов и VLAN;
-- безопасное управление DNS interception и FakeIP;
-- health/deep/domain-policy проверки и аварийный rollback;
-- управление логами, ротацией и хранением;
-- **метрики** для Prometheus/совместимых систем мониторинга;
+Уже подтверждено на реальной системе:
+
+- запуск sing-box с автоматическим созданием каталога журнала;
+- policy source + PF `route-to` через отдельный VPN-шлюз;
+- fail-closed защита от утечки policy-трафика через WAN;
+- селективный DNS через FakeIP;
+- отдельный bootstrap outbound для policy-bound DoH без циклической зависимости;
+- восстановление после WAN `DOWN/UP` и `rc.newwanip`;
+- readiness-проверка `underlay -> policy DNS -> E2E HTTPS`;
+- один ограниченный self-heal restart при сломанном policy path;
+- локальная и deep-диагностика, включая VPN egress и security checks.
+
+Следующий этап — перенести уже проверенный recovery/health lifecycle из production-прототипа непосредственно в структуру плагина и пакета.
+
+## Основные направления
+
+- OPNsense-native конфигурация через MVC / `config.xml`;
+- правила `PROXY` / `DIRECT` / `REJECT`;
+- выбор клиентов по IP, CIDR, диапазонам и OPNsense Alias;
+- выбор интерфейсов и VLAN;
+- независимое управление DNS interception и traffic interception;
+- безопасный FakeIP и policy-bound DNS;
+- startup/WAN recovery без бесконечных restart loops;
+- `OK / WARN / CRITICAL` health-state с отдельным состоянием безопасности;
 - Gotify-уведомления о переходах состояния;
-- воспроизводимые сборки с фиксированной версией Vincent/reF1nd core и SHA256;
-- сохранение пользовательской конфигурации при обновлении пакета.
+- Prometheus-compatible метрики;
+- журналирование, ротация и хранение логов;
+- RU/EN интерфейс;
+- фиксированная версия Vincent/reF1nd core, SHA256 и build provenance;
+- безопасное обновление без потери пользовательской конфигурации.
 
-## Ветки
+## Структура репозитория
 
-- `main` — стабильная production-ветка;
-- `develop` — интеграция и тестирование;
-- `upstream-main` — неизменённое зеркало `Opnwall/main` для переноса upstream-обновлений;
-- `feature/*` — отдельные задачи разработки.
-
-## Структура
+Репозиторий содержит только один OPNsense-плагин:
 
 ```text
-src/os-sing-box/        исходная кодовая база плагина и package build
-docs/                   архитектура, дорожная карта и проектные решения
-.github/                 CI и шаблоны разработки
+src/os-sing-box/    исходники плагина и FreeBSD package build
+docs/               архитектура и дорожная карта
+.github/             CI
 ```
 
-Переименование внутреннего package/source tree в `os-sing-box-plus` будет выполнено отдельной миграцией после проектирования upgrade path с `os-sing-box`, чтобы не ломать существующие установки.
+Внутреннее имя `os-sing-box` пока сохраняется намеренно. Переименование package/origin будет выполняться только вместе с корректным upgrade/migration path для существующих установок.
 
-## Upstream и происхождение
+## Сборка
 
-Проект основан на community-плагине `os-sing-box` из репозитория Opnwall и сохраняет совместимость с соответствующей MIT-лицензией. Ядро sing-box и FreeBSD/reF1nd-сборки являются отдельными upstream-компонентами.
+На FreeBSD/OPNsense:
 
-- Opnwall: https://github.com/Opnwall/OPNsense-repo
-- sing-box: https://github.com/SagerNet/sing-box
-- Vincent-Loeng/bsd-box: https://github.com/Vincent-Loeng/bsd-box
+```sh
+make package
+```
 
-## Важное правило разработки
+Корневой `Makefile` вызывает сборку единственного плагина в `src/os-sing-box`.
 
-Любое изменение, затрагивающее запуск, DNS, маршрутизацию, PF/PBR, FakeIP или package upgrade, должно проходить:
+Текущий build pipeline ещё требует доработки перед release: production-сборка не должна использовать плавающий `releases/latest`; версия core и SHA256 должны быть зафиксированы.
+
+## Документация
+
+- `docs/ARCHITECTURE.md` — архитектурные решения и требования;
+- `docs/ROADMAP.md` — последовательность разработки и текущий статус.
+
+## Upstream
+
+Проект основан на community-плагине `Opnwall/os-sing-box` и сохраняет его происхождение и лицензионные требования.
+
+Основные upstream-компоненты:
+
+- `Opnwall/OPNsense-repo` — исходная интеграция OPNsense;
+- `SagerNet/sing-box` — sing-box;
+- `Vincent-Loeng/bsd-box` — FreeBSD/reF1nd builds.
+
+## Безопасность изменений
+
+Изменения, затрагивающие DNS, PF/PBR, FakeIP, gateway routing, startup lifecycle или package upgrade, должны проходить проверку по цепочке:
 
 ```text
-backup -> generate/modify -> sing-box check -> restart -> health -> deep probe -> rollback on failure
+backup -> validate -> apply -> service check -> policy DNS -> E2E probe -> rollback on failure
 ```
 
-Проект не связан с Deciso или официальным проектом OPNsense.
+Бесконечные recovery/restart loops не допускаются.
+
+## Лицензия
+
+См. `LICENSE`.
