@@ -4,11 +4,10 @@ set -eu
 PKG_NAME="${PKG_NAME:-os-sing-box}"
 VERSION="${VERSION:-1.0.2}"
 ORIGIN="${ORIGIN:-opnsense/os-sing-box}"
-COMMENT="${COMMENT:-sing-box proxy integration for OPNsense}"
-MAINTAINER="${MAINTAINER:-https://github.com/Opnwall/}"
-WWW="${WWW:-https://sing-box.sagernet.org/}"
+COMMENT="${COMMENT:-Интеграция sing-box с OPNsense}"
+MAINTAINER="${MAINTAINER:-https://github.com/Clyde89/os-sing-box-plus/issues}"
+WWW="${WWW:-https://github.com/Clyde89/os-sing-box-plus}"
 PREFIX="${PREFIX:-/usr/local}"
-FORMAT="${FORMAT:-tgz}"
 ABI="${ABI:-universal}"
 OUTPUT_NAME="${OUTPUT_NAME:-${PKG_NAME}.pkg}"
 SING_BOX_ASSET="${SING_BOX_ASSET:-bsd-box-reF1nd-freebsd-amd64.xz}"
@@ -24,20 +23,20 @@ DISTDIR="${DISTDIR:-"$SCRIPT_DIR/dist"}"
 DOWNLOADDIR="$WORKDIR/downloads"
 
 die() {
-    echo "error: $*" >&2
+    echo "Ошибка: $*" >&2
     exit 1
 }
 
 need_file() {
-    [ -e "$SCRIPT_DIR/$1" ] || die "missing required file: $1"
+    [ -e "$SCRIPT_DIR/$1" ] || die "отсутствует обязательный файл: $1"
 }
 
-command -v pkg >/dev/null 2>&1 || die "pkg command not found. Run this script on FreeBSD/OPNsense."
-command -v tar >/dev/null 2>&1 || die "tar command not found."
-command -v xz >/dev/null 2>&1 || die "xz command not found."
-command -v sha256 >/dev/null 2>&1 || die "sha256 command not found."
+command -v pkg >/dev/null 2>&1 || die "команда pkg не найдена; сборка выполняется на FreeBSD или OPNsense"
+command -v tar >/dev/null 2>&1 || die "команда tar не найдена"
+command -v xz >/dev/null 2>&1 || die "команда xz не найдена"
+command -v sha256 >/dev/null 2>&1 || die "команда sha256 не найдена"
 if ! command -v fetch >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
-    die "fetch or curl command not found."
+    die "для загрузки бинарного файла требуется fetch или curl"
 fi
 
 need_file "src/usr/local/etc/sing-box/config.json.sample"
@@ -49,7 +48,6 @@ need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Menu/Menu.xml"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/ACL/ACL.xml"
 need_file "src/usr/local/www/sing-box.php"
 need_file "src/usr/local/www/sing-box_log.php"
-need_file "packaging/freebsd/+MANIFEST.in"
 need_file "packaging/freebsd/+POST_INSTALL"
 need_file "packaging/freebsd/+PRE_DEINSTALL"
 need_file "packaging/freebsd/+POST_DEINSTALL"
@@ -64,7 +62,7 @@ case "$ABI" in
         PKG_ABI="$(pkg config ABI)"
         case "$PKG_ABI" in
             FreeBSD:*:amd64) ;;
-            *) die "unsupported native ABI: $PKG_ABI" ;;
+            *) die "неподдерживаемый ABI: $PKG_ABI" ;;
         esac
         ABI_MAJOR="$(printf '%s\n' "$PKG_ABI" | awk -F: '{print $2}')"
         PKG_ARCH="freebsd:${ABI_MAJOR}:x86:64"
@@ -75,7 +73,7 @@ case "$ABI" in
         PKG_ARCH="freebsd:${ABI_MAJOR}:x86:64"
         ;;
     *)
-        die "unsupported ABI: $ABI"
+        die "неподдерживаемый ABI: $ABI"
         ;;
 esac
 unset ABI || true
@@ -93,6 +91,7 @@ copy_tree() {
 download_file() {
     download_url="$1"
     download_dst="$2"
+
     if command -v curl >/dev/null 2>&1; then
         curl -fL --retry 3 --retry-all-errors --retry-delay 2 --connect-timeout 30 --max-time "$DOWNLOAD_TIMEOUT" -o "$download_dst" "$download_url"
     else
@@ -103,17 +102,18 @@ download_file() {
 unpack_binary() {
     archive="$1"
     binary_dst="$2"
-    tmp="$binary_dst.tmp"
+    temporary="$binary_dst.tmp"
 
-    rm -f "$tmp" "$binary_dst"
+    rm -f "$temporary" "$binary_dst"
     if xz -t "$archive" >/dev/null 2>&1; then
-        xz -dc "$archive" > "$tmp"
+        xz -dc "$archive" > "$temporary"
     else
-        cp "$archive" "$tmp"
+        cp "$archive" "$temporary"
     fi
-    mv -f "$tmp" "$binary_dst"
+
+    mv -f "$temporary" "$binary_dst"
     chmod 0755 "$binary_dst"
-    [ -s "$binary_dst" ] || die "binary is empty: $archive"
+    [ -s "$binary_dst" ] || die "получен пустой бинарный файл: $archive"
 }
 
 prepare_binary() {
@@ -125,17 +125,17 @@ prepare_binary() {
 
     mkdir -p "$DOWNLOADDIR"
     if [ -f "$local_asset" ]; then
-        echo "==> Using local asset $local_asset"
+        echo "==> Используется локальный бинарный файл $local_asset"
         unpack_binary "$local_asset" "$binary_dst"
     else
-        echo "==> Downloading $binary_url"
+        echo "==> Загружается $binary_url"
         rm -f "$archive"
         download_file "$binary_url" "$archive"
         unpack_binary "$archive" "$binary_dst"
     fi
 }
 
-echo "==> Staging files"
+echo "==> Подготавливаются файлы пакета"
 copy_tree "$SCRIPT_DIR/src" "$STAGEDIR"
 prepare_binary "$SING_BOX_ASSET" "$SING_BOX_DOWNLOAD_URL" "$DOWNLOADDIR/sing-box"
 mkdir -p "$STAGEDIR/usr/local/bin"
@@ -144,7 +144,7 @@ chmod 0700 "$STAGEDIR/usr/local/etc/sing-box"
 chmod 0644 "$STAGEDIR/usr/local/etc/sing-box/config.json.sample"
 chmod 0755 "$STAGEDIR/usr/local/etc/rc.d/sing-box"
 
-echo "==> Generating plist"
+echo "==> Формируется список файлов"
 find "$STAGEDIR" -type f | sed "s#^$STAGEDIR##" | sort > "$PLIST"
 
 FLATSIZE=0
@@ -153,7 +153,7 @@ while IFS= read -r file; do
     FLATSIZE=$((FLATSIZE + size))
 done < "$PLIST"
 
-echo "==> Generating metadata"
+echo "==> Формируются метаданные"
 {
     printf 'name: "%s"\n' "$PKG_NAME"
     printf 'origin: "%s"\n' "$ORIGIN"
@@ -165,10 +165,6 @@ echo "==> Generating metadata"
     printf 'arch: "%s"\n' "$PKG_ARCH"
     printf 'prefix: "%s"\n' "$PREFIX"
     printf 'flatsize: %s\n' "$FLATSIZE"
-    printf 'deps: {\n'
-    printf '    jq: { origin: "textproc/jq", version: ">=0" }\n'
-    printf '    curl: { origin: "ftp/curl", version: ">=0" }\n'
-    printf '}\n'
     printf 'desc: <<EOD\n'
     cat "$SCRIPT_DIR/packaging/freebsd/pkg-descr"
     printf '\nEOD\n'
@@ -192,7 +188,7 @@ echo "==> Generating metadata"
 } > "$METADIR/+MANIFEST"
 cp "$METADIR/+MANIFEST" "$METADIR/+COMPACT_MANIFEST"
 
-echo "==> Creating package for $PKG_ABI"
+echo "==> Создаётся пакет для $PKG_ABI"
 PKGROOT="$WORKDIR/package-root"
 TARLIST="$WORKDIR/pkg-tarlist"
 rm -rf "$PKGROOT"
@@ -206,15 +202,14 @@ copy_tree "$STAGEDIR" "$PKGROOT"
         sed "s#^$PKGROOT/##" |
         sort
 } > "$TARLIST"
+
 tar -cPzf "$DISTDIR/$OUTPUT_NAME" \
     -C "$PKGROOT" \
     -s ',^etc,/etc,' \
     -s ',^usr,/usr,' \
     -T "$TARLIST"
 
-echo "==> Package: $DISTDIR/$OUTPUT_NAME"
+echo "==> Пакет: $DISTDIR/$OUTPUT_NAME"
 pkg info -F "$DISTDIR/$OUTPUT_NAME" >/dev/null
-echo "==> Verified package metadata"
-if command -v sha256 >/dev/null 2>&1; then
-    sha256 "$DISTDIR/$OUTPUT_NAME"
-fi
+echo "==> Метаданные пакета проверены"
+sha256 "$DISTDIR/$OUTPUT_NAME"
