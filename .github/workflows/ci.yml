@@ -30,6 +30,12 @@ jobs:
           test ! -e src/usr/bin/sing_box_sub
           test ! -e src/usr/local/www/sing-box_sub.php
           test ! -e src/usr/local/www/sing-box_sub_log.php
+          grep -q 'SING_BOX_RELEASE=.*v1.13.13-vincent' build.sh
+          grep -q 'SING_BOX_SHA256=' build.sh
+          if grep -q '/releases/latest/' build.sh; then
+            echo 'Обнаружена плавающая ссылка releases/latest' >&2
+            exit 1
+          fi
 
       - name: Проверка JSON
         shell: bash
