@@ -60,19 +60,20 @@ rm -rf /usr/local/opnsense/mvc/app/models/OPNsense/sing-box
 
 service configd restart >/dev/null 2>&1 || true
 
-if grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE" 2>/dev/null; then
-    service sing-box restart >/dev/null 2>&1 || true
-fi
-
-if [ "$legacy_migration_processed" -eq 1 ]; then
-    configctl filter reload >/dev/null 2>&1 || true
-fi
-
-if [ "$legacy_migration_failed" -eq 0 ]; then
-    rm -f "$MIGRATION_FILE" "$LEGACY_CONFIG_SNAPSHOT" "$LEGACY_VERSION_FILE"
-    rmdir "$MIGRATION_DIR" 2>/dev/null || true
+if [ "$legacy_migration_processed" -eq 1 ] && [ "$legacy_migration_failed" -eq 0 ]; then
+    if ! configctl filter reload >/dev/null 2>&1; then
+        legacy_migration_failed=1
+        echo "Ошибка: не удалось применить восстановленные правила firewall; миграционные данные сохранены" >&2
+    fi
 fi
 
 if [ "$legacy_migration_failed" -ne 0 ]; then
     exit 1
 fi
+
+if grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE" 2>/dev/null; then
+    service sing-box restart >/dev/null 2>&1 || true
+fi
+
+rm -f "$MIGRATION_FILE" "$LEGACY_CONFIG_SNAPSHOT" "$LEGACY_VERSION_FILE"
+rmdir "$MIGRATION_DIR" 2>/dev/null || true
