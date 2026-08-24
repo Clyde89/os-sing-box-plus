@@ -1,6 +1,6 @@
 <acl>
     <page-vpn-sing-box>
-        <name>VPN: Proxy Suite: Sing-Box</name>
+        <name>VPN: Прокси: sing-box</name>
         <patterns>
             <pattern>sing-box.php*</pattern>
             <pattern>sing-box_log.php*</pattern>
