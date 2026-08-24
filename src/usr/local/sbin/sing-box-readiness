@@ -4,6 +4,7 @@ set -u
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 TAG="sing-box-readiness"
 CONFIG_FILE="/usr/local/etc/sing-box/readiness.conf"
+RC_CONF_FILE="/etc/rc.conf.d/sing_box"
 LOCK_DIR="/var/run/sing-box-readiness.lock"
 EVENT="manual"
 EVENT_INTERFACES=""
@@ -19,6 +20,12 @@ log_msg()
 cleanup()
 {
     rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+
+service_is_enabled()
+{
+    [ -r "$RC_CONF_FILE" ] || return 1
+    /usr/bin/grep -Eq '^\s*sing_box_enable\s*=\s*"YES"\s*$' "$RC_CONF_FILE"
 }
 
 is_enabled()
@@ -171,6 +178,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+service_is_enabled || exit 0
 [ -r "$CONFIG_FILE" ] || exit 0
 # shellcheck disable=SC1090
 . "$CONFIG_FILE"
