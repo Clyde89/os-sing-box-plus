@@ -1,4 +1,4 @@
-name: Repository checks
+name: Проверки репозитория
 
 on:
   push:
@@ -17,36 +17,33 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Verify focused source tree
+      - name: Проверка структуры
         shell: bash
         run: |
           set -euo pipefail
-          test -d src/os-sing-box
-          extra="$(find src -mindepth 1 -maxdepth 1 -type d ! -name os-sing-box -print)"
-          if [ -n "$extra" ]; then
-            echo "Unexpected plugin directories:"
-            printf '%s\n' "$extra"
-            exit 1
-          fi
+          test -f build.sh
+          test -d src
+          test -d packaging/freebsd
 
-      - name: Validate JSON files
+      - name: Проверка JSON
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json
           from pathlib import Path
-          for path in Path('src/os-sing-box').rglob('*.json'):
+          for path in Path('src').rglob('*.json'):
               with path.open('r', encoding='utf-8') as fh:
                   json.load(fh)
               print(f'OK {path}')
           PY
 
-      - name: Check shell syntax
+      - name: Проверка shell-скриптов
         shell: bash
         run: |
           set -euo pipefail
+          sh -n build.sh
           while IFS= read -r -d '' file; do
             sh -n "$file"
             echo "OK $file"
-          done < <(find src/os-sing-box -type f \( -name '*.sh' -o -path '*/rc.d/*' \) -print0)
+          done < <(find src packaging -type f \( -name '*.sh' -o -path '*/rc.d/*' -o -name '+POST_INSTALL' -o -name '+PRE_DEINSTALL' -o -name '+POST_DEINSTALL' \) -print0)

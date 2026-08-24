@@ -1,35 +1,42 @@
 # os-sing-box-plus
 
-`os-sing-box-plus` is a community plugin for integrating **sing-box** with **OPNsense**.
+`os-sing-box-plus` — community-плагин для интеграции **sing-box** с **OPNsense**.
 
-The project is based on `Opnwall/os-sing-box` and focuses on reliable service lifecycle, policy routing, DNS/FakeIP handling, health checks and recovery after network changes.
+Проект основан на `Opnwall/os-sing-box` и развивается как отдельный плагин с акцентом на надёжный жизненный цикл службы, policy routing, DNS/FakeIP, диагностику и восстановление после сетевых изменений.
 
-> This project is under active development and is not an official OPNsense/Deciso plugin.
+> Проект находится в активной разработке и не является официальным плагином OPNsense/Deciso.
 
-## Features
+## Возможности
 
-- sing-box service integration for OPNsense;
-- TUN-based traffic handling;
-- DNS and FakeIP support;
-- policy routing support;
-- startup and WAN-event recovery;
-- health and end-to-end connectivity checks;
-- log handling and rotation;
-- package build for FreeBSD/OPNsense.
+- интеграция службы sing-box с OPNsense;
+- обработка трафика через TUN;
+- поддержка DNS и FakeIP;
+- policy routing;
+- восстановление после запуска системы и изменений WAN;
+- health-check и сквозные проверки доступности;
+- управление журналами и их ротацией;
+- сборка пакета для FreeBSD/OPNsense.
 
-## Build
+## Сборка
 
-Build the package on FreeBSD or OPNsense:
+Сборка выполняется на FreeBSD или OPNsense:
 
 ```sh
 make package
 ```
 
-The resulting package is created from the plugin source in `src/os-sing-box`.
+Результат сохраняется в каталоге `dist/`.
 
-## Status
+## Структура
 
-The project is currently in development. Package layout and upgrade compatibility are being stabilized before the first independent release.
+- `src/` — файлы, устанавливаемые пакетом;
+- `packaging/` — служебные файлы FreeBSD-пакета;
+- `build.sh` — сборка пакета;
+- `Makefile` — основные команды сборки.
+
+## Статус
+
+До первого самостоятельного релиза структура пакета и совместимость обновлений остаются в стадии стабилизации.
 
 ## Upstream
 
@@ -37,6 +44,6 @@ The project is currently in development. Package layout and upgrade compatibilit
 - [SagerNet/sing-box](https://github.com/SagerNet/sing-box)
 - [Vincent-Loeng/bsd-box](https://github.com/Vincent-Loeng/bsd-box)
 
-## License
+## Лицензия
 
-See [LICENSE](LICENSE).
+См. [LICENSE](LICENSE).
