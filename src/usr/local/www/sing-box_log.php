@@ -3,7 +3,7 @@
 /*
  * Copyright (C) 2014-2026 Deciso B.V.
  * Copyright (C) 2010 Erik Fonnesbeck
- * Copyright (C) 2008-2010 Ermal Luçi
+ * Copyright (C) 2008-2010 Ermal Luči
  * Copyright (C) 2004-2008 Scott Ullrich <sullrich@gmail.com>
  * Copyright (C) 2006 Daniel S. Haischt
  * Copyright (C) 2003-2004 Manuel Kasper <mk@neon1.net>
@@ -17,7 +17,7 @@
  *
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
- *   documentation and/or other materials provided with the distribution.
+ *    documentation and/or other materials provided with the distribution.
  *
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
  * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
@@ -30,71 +30,58 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-const LOG_FILE = "/var/log/sing-box.log";
+
+const LOG_FILE = '/var/log/sing-box/sing-box.log';
 const LOG_TAIL_LINES = 200;
 const LOG_MAX_BYTES = 262144;
 
 header('Content-Type: text/plain; charset=UTF-8');
 
-function log_t($text)
+function readLogTail($path, $maxLines, $maxBytes)
 {
-    $config_language = '';
-    if (is_readable('/conf/config.xml')) {
-        $config_xml = @file_get_contents('/conf/config.xml');
-        if (is_string($config_xml) && preg_match('/<language>([^<]+)<\/language>/', $config_xml, $matches)) {
-            $config_language = $matches[1];
-        }
-    }
-    $map = [
-        'zh' => [
-            'Error' => '错误',
-            'Log file was not found.' => '日志文件未找到！',
-            'Unable to read the log file.' => '无法读取日志文件！',
-            'Unable to read the log size.' => '无法读取日志大小！',
-        ],
-    ];
-    $candidate = strtolower(str_replace('-', '_', $config_language));
-    $lang = $candidate === 'zh_cn' ? 'zh' : 'en';
-    return $map[$lang][$text] ?? $text;
-}
-
-function read_log_tail($log_file, $max_lines, $max_bytes)
-{
-    if (!is_file($log_file) || !is_readable($log_file)) {
-        return "[" . log_t('Error') . "] " . log_t('Log file was not found.');
+    if (!is_file($path)) {
+        return '[Информация] Журнал sing-box пока не создан.';
     }
 
-    $fp = @fopen($log_file, 'rb');
-    if ($fp === false) {
-        return "[" . log_t('Error') . "] " . log_t('Unable to read the log file.');
+    if (!is_readable($path)) {
+        return '[Ошибка] Журнал sing-box недоступен для чтения.';
     }
 
-    $file_size = filesize($log_file);
-    if ($file_size === false) {
-        fclose($fp);
-        return "[" . log_t('Error') . "] " . log_t('Unable to read the log size.');
+    $handle = @fopen($path, 'rb');
+    if ($handle === false) {
+        return '[Ошибка] Не удалось открыть журнал sing-box.';
     }
 
-    $read_size = min($file_size, $max_bytes);
-    if ($read_size <= 0) {
-        fclose($fp);
-        return "";
+    $size = filesize($path);
+    if ($size === false) {
+        fclose($handle);
+        return '[Ошибка] Не удалось определить размер журнала sing-box.';
     }
 
-    fseek($fp, -$read_size, SEEK_END);
-    $content = fread($fp, $read_size);
-    fclose($fp);
+    $readSize = min($size, $maxBytes);
+    if ($readSize <= 0) {
+        fclose($handle);
+        return '';
+    }
+
+    if (fseek($handle, -$readSize, SEEK_END) !== 0) {
+        fclose($handle);
+        return '[Ошибка] Не удалось прочитать конец журнала sing-box.';
+    }
+
+    $content = fread($handle, $readSize);
+    fclose($handle);
 
     if ($content === false || $content === '') {
-        return "";
+        return '';
     }
 
-    $lines = preg_split("/\r\n|\n|\r/", $content);
-    if ($file_size > $read_size && !empty($lines)) {
+    $lines = preg_split('/\r\n|\n|\r/', $content);
+    if ($size > $readSize && !empty($lines)) {
         array_shift($lines);
     }
 
-    return implode("\n", array_slice($lines, -$max_lines));
+    return implode("\n", array_slice($lines, -$maxLines));
 }
 
-echo read_log_tail(LOG_FILE, LOG_TAIL_LINES, LOG_MAX_BYTES);
+echo readLogTail(LOG_FILE, LOG_TAIL_LINES, LOG_MAX_BYTES);
