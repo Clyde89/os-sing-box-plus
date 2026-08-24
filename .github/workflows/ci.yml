@@ -39,6 +39,7 @@ jobs:
           test ! -e src/usr/bin/sing_box_sub
           test ! -e src/usr/local/www/sing-box_sub.php
           test ! -e src/usr/local/www/sing-box_sub_log.php
+          grep -q 'VERSION="${VERSION:-1.1.0}"' build.sh
           grep -q 'SING_BOX_RELEASE=.*v1.13.13-vincent' build.sh
           grep -q 'SING_BOX_SHA256=' build.sh
           grep -q '^SING_BOX_READINESS_ENABLE="NO"$' src/usr/local/etc/sing-box/readiness.conf.sample
@@ -47,9 +48,11 @@ jobs:
           grep -q '^SING_BOX_READINESS_POLICY_SUFFIX=""$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_E2E_NAME=""$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^LEGACY_CUTOFF_VERSION="1.0.2"$' packaging/freebsd/+PRE_INSTALL
+          grep -q '\[ "$comparison" = "<" \] || \[ "$comparison" = "=" \]' packaging/freebsd/+PRE_INSTALL
           grep -q 'config.xml.legacy' packaging/freebsd/+PRE_INSTALL
           grep -q 'migrate_legacy.php' packaging/freebsd/+POST_INSTALL
           grep -q '762b3ec8-79c2-48b4-9793-c653bb3d2265' src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
+          grep -q '"product_version":"1.1.0"' src/usr/local/opnsense/version/sing-box
           if grep -q '/releases/latest/' build.sh; then
             echo 'Обнаружена плавающая ссылка releases/latest' >&2
             exit 1
