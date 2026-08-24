@@ -1,65 +1,19 @@
 #!/bin/sh
 
-CONFIG_FILE="/conf/config.xml"
-TMP_FILE="/tmp/config.xml.tmp"
-RULE_UUID="762b3ec8-79c2-48b4-9793-c653bb3d2265"
+PID_FILE="/var/run/sing-box.pid"
 
-pkg_timestamp() {
-    date | sed 's/[^A-Za-z0-9]/_/g'
-}
-
-echo "===> Stopping sing-box"
+echo "===> Останавливается sing-box"
 service sing-box stop >/dev/null 2>&1 || true
-pkill -TERM -f '/usr/local/bin/sing-box' 2>/dev/null || true
-rm -f /var/run/sing-box.pid
 
-if [ -f "$CONFIG_FILE" ]; then
-    cp "$CONFIG_FILE" "/conf/config.xml.bak.sing_box_pkg_deinstall_$(pkg_timestamp)" || true
-fi
-
-if [ -f "$CONFIG_FILE" ]; then
-    TARGET_IF_BLOCK="$(awk '
-    BEGIN { in_block = 0; current = ""; found = "" }
-    {
-      if ($0 ~ /^[[:space:]]*<opt[0-9]+>[[:space:]]*$/) {
-        line = $0
-        gsub(/^[[:space:]]*</, "", line)
-        gsub(/>[[:space:]]*$/, "", line)
-        current = line
-        in_block = 1
-      }
-      if (in_block && $0 ~ /<if>tun_singbox<\/if>/) found = current
-      if (in_block && current != "" && $0 ~ ("^[[:space:]]*</" current ">[[:space:]]*$")) {
-        in_block = 0
-        current = ""
-      }
-    }
-    END { if (found != "") print found }
-    ' "$CONFIG_FILE")"
-
-    if [ -n "$TARGET_IF_BLOCK" ]; then
-        awk -v target="$TARGET_IF_BLOCK" '
-        BEGIN { skip = 0 }
-        {
-          if ($0 ~ ("^[[:space:]]*<" target ">[[:space:]]*$")) { skip = 1; next }
-          if (skip == 1) {
-            if ($0 ~ ("^[[:space:]]*</" target ">[[:space:]]*$")) skip = 0
-            next
-          }
-          print
-        }
-        ' "$CONFIG_FILE" > "$TMP_FILE" && mv "$TMP_FILE" "$CONFIG_FILE" || rm -f "$TMP_FILE"
+if [ -f "$PID_FILE" ]; then
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        proc_comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+        case "$proc_comm" in
+            sing-box|*/sing-box)
+                kill "$pid" 2>/dev/null || true
+                ;;
+        esac
     fi
-
-    awk -v uuid="$RULE_UUID" '
-    BEGIN { skip = 0 }
-    $0 ~ "<rule uuid=\"" uuid "\">" { skip = 1; next }
-    skip == 1 {
-      if ($0 ~ /<\/rule>/) skip = 0
-      next
-    }
-    { print }
-    ' "$CONFIG_FILE" > "$TMP_FILE" && mv "$TMP_FILE" "$CONFIG_FILE" || rm -f "$TMP_FILE"
+    rm -f "$PID_FILE"
 fi
-
-configctl filter reload >/dev/null 2>&1 || true
