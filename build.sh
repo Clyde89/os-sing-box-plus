@@ -41,9 +41,6 @@ if ! command -v fetch >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
 fi
 
 need_file "src/usr/local/etc/sing-box/config.json"
-need_file "src/usr/local/etc/sing-box/sub/env"
-need_file "src/usr/local/etc/sing-box/sub/sub.sh"
-need_file "src/usr/local/etc/sing-box/sub/template.json"
 need_file "src/usr/local/etc/rc.d/sing-box"
 need_file "src/etc/rc.conf.d/sing_box"
 need_file "src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf"
@@ -52,9 +49,6 @@ need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Menu/Menu.xml"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/ACL/ACL.xml"
 need_file "src/usr/local/www/sing-box.php"
 need_file "src/usr/local/www/sing-box_log.php"
-need_file "src/usr/local/www/sing-box_sub.php"
-need_file "src/usr/local/www/sing-box_sub_log.php"
-need_file "src/usr/bin/sing_box_sub"
 need_file "packaging/freebsd/+MANIFEST.in"
 need_file "packaging/freebsd/+POST_INSTALL"
 need_file "packaging/freebsd/+PRE_DEINSTALL"
@@ -146,13 +140,8 @@ copy_tree "$SCRIPT_DIR/src" "$STAGEDIR"
 prepare_binary "$SING_BOX_ASSET" "$SING_BOX_DOWNLOAD_URL" "$DOWNLOADDIR/sing-box"
 mkdir -p "$STAGEDIR/usr/local/bin"
 install -m 0755 "$DOWNLOADDIR/sing-box" "$STAGEDIR/usr/local/bin/sing-box"
-chmod 0700 "$STAGEDIR/usr/local/etc/sing-box" "$STAGEDIR/usr/local/etc/sing-box/sub"
-chmod 0600 \
-    "$STAGEDIR/usr/local/etc/sing-box/config.json" \
-    "$STAGEDIR/usr/local/etc/sing-box/sub/env" \
-    "$STAGEDIR/usr/local/etc/sing-box/sub/template.json"
-chmod 0755 "$STAGEDIR/usr/local/etc/sing-box/sub/sub.sh"
-chmod 0755 "$STAGEDIR/usr/bin/sing_box_sub"
+chmod 0700 "$STAGEDIR/usr/local/etc/sing-box"
+chmod 0600 "$STAGEDIR/usr/local/etc/sing-box/config.json"
 chmod 0755 "$STAGEDIR/usr/local/etc/rc.d/sing-box"
 
 echo "==> Generating plist"
