@@ -2,29 +2,29 @@
 
 Community-плагин **sing-box для OPNsense**, развиваемый на базе `Opnwall/os-sing-box`.
 
-Цель проекта — сделать интеграцию sing-box с OPNsense предсказуемой и безопасной: с нормальным жизненным циклом сервиса, policy routing, DNS/FakeIP, диагностикой, автоматическим восстановлением после сетевых событий и воспроизводимой сборкой пакета.
+Цель проекта — превратить исходную интеграцию sing-box в аккуратный OPNsense-плагин с предсказуемым lifecycle, policy routing, DNS/FakeIP, диагностикой, автоматическим восстановлением после сетевых событий и воспроизводимой сборкой пакета.
 
-> Проект не является официальной частью OPNsense/Deciso.
+> Проект находится в активной разработке и пока не считается стабильным release. Он не является официальной частью OPNsense/Deciso.
 
 ## Текущий статус
 
-Разработка ведётся и тестируется на **OPNsense 26.7 / FreeBSD 15.1**.
+Рабочий baseline проверяется на **OPNsense 26.7.2_2 / FreeBSD 15.1**.
 
-Уже подтверждено на реальной системе:
+На реальной системе уже подтверждены:
 
-- запуск sing-box с автоматическим созданием каталога журнала;
-- policy source + PF `route-to` через отдельный VPN-шлюз;
-- fail-closed защита от утечки policy-трафика через WAN;
-- селективный DNS через FakeIP;
-- отдельный bootstrap outbound для policy-bound DoH без циклической зависимости;
-- восстановление после WAN `DOWN/UP` и `rc.newwanip`;
-- readiness-проверка `underlay -> policy DNS -> E2E HTTPS`;
-- один ограниченный self-heal restart при сломанном policy path;
-- локальная и deep-диагностика, включая VPN egress и security checks.
+- безопасный запуск sing-box с self-heal каталога журнала;
+- policy routing через отдельный gateway с PF `route-to`;
+- fail-closed защита policy-трафика от выхода напрямую через WAN;
+- селективный DNS и FakeIP;
+- отдельный bootstrap outbound для policy-bound DoH без циклической `domain_resolver` / `detour` зависимости;
+- воспроизводимый отказ уже запущенного sing-box после WAN `DOWN/UP` и последующей routing reconfiguration;
+- recovery-прототип через OPNsense `newwanip`: `underlay -> policy DNS -> E2E HTTPS -> один restart -> повторная проверка`;
+- автоматическое восстановление после реального WAN flap без ручного вмешательства;
+- local/deep health-прототип с проверками service, DNS, TUN, FakeIP, PBR, fail-closed и VPN egress.
 
-Следующий этап — перенести уже проверенный recovery/health lifecycle из production-прототипа непосредственно в структуру плагина и пакета.
+Следующий практический этап — перенести уже проверенные recovery/health механизмы из production-прототипа непосредственно в package-managed структуру плагина.
 
-## Основные направления
+## Что будет в os-sing-box-plus
 
 - OPNsense-native конфигурация через MVC / `config.xml`;
 - правила `PROXY` / `DIRECT` / `REJECT`;
@@ -33,17 +33,17 @@ Community-плагин **sing-box для OPNsense**, развиваемый на
 - независимое управление DNS interception и traffic interception;
 - безопасный FakeIP и policy-bound DNS;
 - startup/WAN recovery без бесконечных restart loops;
-- `OK / WARN / CRITICAL` health-state с отдельным состоянием безопасности;
-- Gotify-уведомления о переходах состояния;
-- Prometheus-compatible метрики;
-- журналирование, ротация и хранение логов;
+- health-state `OK / WARN / CRITICAL` с отдельным security-state;
+- Gotify-уведомления только по переходам состояния;
+- Prometheus-compatible метрики без secrets и high-cardinality labels по умолчанию;
+- управление логами, ротацией и хранением;
 - RU/EN интерфейс;
 - фиксированная версия Vincent/reF1nd core, SHA256 и build provenance;
 - безопасное обновление без потери пользовательской конфигурации.
 
 ## Структура репозитория
 
-Репозиторий содержит только один OPNsense-плагин:
+В рабочем tree остаётся только один OPNsense-плагин:
 
 ```text
 src/os-sing-box/    исходники плагина и FreeBSD package build
@@ -51,36 +51,45 @@ docs/               архитектура и дорожная карта
 .github/             CI
 ```
 
-Внутреннее имя `os-sing-box` пока сохраняется намеренно. Переименование package/origin будет выполняться только вместе с корректным upgrade/migration path для существующих установок.
+Старые README/скриншоты исходного community-репозитория удалены. Release-бинарник core также не хранится в Git; build-скрипт может получать его как внешний asset. До первого стабильного release этот механизм будет дополнительно переведён с `releases/latest` на фиксированную версию и обязательную SHA256-проверку.
+
+Внутреннее package-имя `os-sing-box` пока сохраняется намеренно. Переименование в `os-sing-box-plus` будет выполняться только вместе с корректным migration/upgrade path для существующих установок.
 
 ## Сборка
 
-На FreeBSD/OPNsense:
+Сборка пакета выполняется на FreeBSD/OPNsense:
 
 ```sh
 make package
 ```
 
-Корневой `Makefile` вызывает сборку единственного плагина в `src/os-sing-box`.
+Корневой `Makefile` вызывает build единственного плагина в `src/os-sing-box`.
 
-Текущий build pipeline ещё требует доработки перед release: production-сборка не должна использовать плавающий `releases/latest`; версия core и SHA256 должны быть зафиксированы.
+Текущий build pipeline переходный. Перед release обязательны:
+
+- exact core version;
+- фиксированный download URL;
+- SHA256 verification;
+- build provenance;
+- package install/upgrade/reinstall smoke tests.
 
 ## Документация
 
-- `docs/ARCHITECTURE.md` — архитектурные решения и требования;
-- `docs/ROADMAP.md` — последовательность разработки и текущий статус.
+- `docs/ARCHITECTURE.md` — архитектура и принятые технические решения;
+- `docs/ROADMAP.md` — последовательность разработки и текущие задачи;
+- `CHANGELOG.md` — существенные изменения проекта;
+- `CONTRIBUTING.md` — правила разработки и upstream-sync.
 
-## Upstream
+## Ветки
 
-Проект основан на community-плагине `Opnwall/os-sing-box` и сохраняет его происхождение и лицензионные требования.
+- `main` — стабильная production-ветка;
+- `develop` — интеграционная ветка;
+- `upstream-main` — нетронутое зеркало исходного Opnwall tree;
+- `feature/*` — отдельные задачи разработки.
 
-Основные upstream-компоненты:
+Upstream-зеркало не используется для собственных изменений: релевантные upstream-изменения переносятся выборочно через feature-ветки.
 
-- `Opnwall/OPNsense-repo` — исходная интеграция OPNsense;
-- `SagerNet/sing-box` — sing-box;
-- `Vincent-Loeng/bsd-box` — FreeBSD/reF1nd builds.
-
-## Безопасность изменений
+## Правило безопасного изменения
 
 Изменения, затрагивающие DNS, PF/PBR, FakeIP, gateway routing, startup lifecycle или package upgrade, должны проходить проверку по цепочке:
 
@@ -89,6 +98,16 @@ backup -> validate -> apply -> service check -> policy DNS -> E2E probe -> rollb
 ```
 
 Бесконечные recovery/restart loops не допускаются.
+
+## Upstream
+
+Проект основан на community-плагине `Opnwall/os-sing-box` и сохраняет его происхождение и лицензионные требования.
+
+Основные upstream-компоненты:
+
+- `Opnwall/OPNsense-repo` — исходная OPNsense-интеграция;
+- `SagerNet/sing-box` — upstream sing-box;
+- `Vincent-Loeng/bsd-box` — FreeBSD/reF1nd builds.
 
 ## Лицензия
 
