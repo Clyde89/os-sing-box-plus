@@ -25,7 +25,7 @@ cleanup()
 service_is_enabled()
 {
     [ -r "$RC_CONF_FILE" ] || return 1
-    /usr/bin/grep -Eq '^\s*sing_box_enable\s*=\s*"YES"\s*$' "$RC_CONF_FILE"
+    /usr/bin/grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE"
 }
 
 is_enabled()
