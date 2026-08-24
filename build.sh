@@ -41,7 +41,6 @@ fi
 
 need_file "src/usr/local/etc/sing-box/config.json.sample"
 need_file "src/usr/local/etc/rc.d/sing-box"
-need_file "src/etc/rc.conf.d/sing_box"
 need_file "src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf"
 need_file "src/usr/local/etc/inc/plugins.inc.d/sing_box.inc"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Menu/Menu.xml"
