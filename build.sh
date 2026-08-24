@@ -10,8 +10,10 @@ WWW="${WWW:-https://github.com/Clyde89/os-sing-box-plus}"
 PREFIX="${PREFIX:-/usr/local}"
 ABI="${ABI:-universal}"
 OUTPUT_NAME="${OUTPUT_NAME:-${PKG_NAME}.pkg}"
+SING_BOX_RELEASE="${SING_BOX_RELEASE:-v1.13.13-vincent}"
 SING_BOX_ASSET="${SING_BOX_ASSET:-bsd-box-reF1nd-freebsd-amd64.xz}"
-SING_BOX_DOWNLOAD_URL="${SING_BOX_DOWNLOAD_URL:-https://github.com/Vincent-Loeng/bsd-box/releases/latest/download/$SING_BOX_ASSET}"
+SING_BOX_SHA256="${SING_BOX_SHA256:-1da7e84757a5ff5d13d4154b4e4055ea5f99d069c2423687fe8165bf504be7d0}"
+SING_BOX_DOWNLOAD_URL="${SING_BOX_DOWNLOAD_URL:-https://github.com/Vincent-Loeng/bsd-box/releases/download/$SING_BOX_RELEASE/$SING_BOX_ASSET}"
 DOWNLOAD_TIMEOUT="${DOWNLOAD_TIMEOUT:-300}"
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
@@ -116,6 +118,16 @@ unpack_binary() {
     [ -s "$binary_dst" ] || die "получен пустой бинарный файл: $archive"
 }
 
+verify_binary() {
+    binary="$1"
+    expected="$2"
+    actual="$(sha256 -q "$binary")"
+
+    if [ "$actual" != "$expected" ]; then
+        die "контрольная сумма sing-box не совпала: ожидалась $expected, получена $actual"
+    fi
+}
+
 prepare_binary() {
     asset="$1"
     binary_url="$2"
@@ -133,6 +145,9 @@ prepare_binary() {
         download_file "$binary_url" "$archive"
         unpack_binary "$archive" "$binary_dst"
     fi
+
+    verify_binary "$binary_dst" "$SING_BOX_SHA256"
+    echo "==> Проверена контрольная сумма sing-box $SING_BOX_RELEASE"
 }
 
 echo "==> Подготавливаются файлы пакета"
