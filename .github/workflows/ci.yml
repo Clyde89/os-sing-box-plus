@@ -24,6 +24,11 @@ jobs:
           test -f build.sh
           test -d src
           test -d packaging/freebsd
+          test -f src/usr/local/etc/sing-box/config.json.sample
+          test ! -e src/usr/local/etc/sing-box/config.json
+          test ! -e src/usr/bin/sing_box_sub
+          test ! -e src/usr/local/www/sing-box_sub.php
+          test ! -e src/usr/local/www/sing-box_sub_log.php
 
       - name: Проверка JSON
         shell: bash
@@ -32,9 +37,24 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
-          for path in Path('src').rglob('*.json'):
+
+          paths = sorted(set(Path('src').rglob('*.json')) | set(Path('src').rglob('*.json.sample')))
+          for path in paths:
               with path.open('r', encoding='utf-8') as fh:
                   json.load(fh)
+              print(f'OK {path}')
+          PY
+
+      - name: Проверка XML
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          for path in sorted(Path('src').rglob('*.xml')):
+              ET.parse(path)
               print(f'OK {path}')
           PY
 
@@ -47,3 +67,18 @@ jobs:
             sh -n "$file"
             echo "OK $file"
           done < <(find src packaging -type f \( -name '*.sh' -o -path '*/rc.d/*' -o -name '+POST_INSTALL' -o -name '+PRE_DEINSTALL' -o -name '+POST_DEINSTALL' \) -print0)
+
+      - name: Установка PHP CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y php-cli
+
+      - name: Проверка PHP
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            php -l "$file"
+          done < <(find src -type f -name '*.php' -print0)
