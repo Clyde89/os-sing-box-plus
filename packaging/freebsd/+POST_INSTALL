@@ -4,6 +4,8 @@ set -eu
 SING_BOX_DIR="/usr/local/etc/sing-box"
 SING_BOX_CONFIG="${SING_BOX_DIR}/config.json"
 SING_BOX_SAMPLE="${SING_BOX_DIR}/config.json.sample"
+READINESS_CONFIG="${SING_BOX_DIR}/readiness.conf"
+READINESS_SAMPLE="${SING_BOX_DIR}/readiness.conf.sample"
 SING_BOX_LOG_DIR="/var/log/sing-box"
 SING_BOX_LOG="${SING_BOX_LOG_DIR}/sing-box.log"
 RC_CONF_FILE="/etc/rc.conf.d/sing_box"
@@ -32,6 +34,10 @@ elif [ ! -f "$SING_BOX_CONFIG" ] && [ -f "$SING_BOX_SAMPLE" ]; then
     install -o root -g wheel -m 0600 "$SING_BOX_SAMPLE" "$SING_BOX_CONFIG"
 elif [ -f "$SING_BOX_CONFIG" ]; then
     chmod 0600 "$SING_BOX_CONFIG"
+fi
+
+if [ ! -f "$READINESS_CONFIG" ] && [ -f "$READINESS_SAMPLE" ]; then
+    install -o root -g wheel -m 0600 "$READINESS_SAMPLE" "$READINESS_CONFIG"
 fi
 
 rm -f /usr/local/www/services_sing_box.php /usr/local/www/status_sing_box.php

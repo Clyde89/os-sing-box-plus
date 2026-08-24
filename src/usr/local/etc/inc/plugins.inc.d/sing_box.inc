@@ -34,3 +34,27 @@ function sing_box_services()
         ],
     ];
 }
+
+function sing_box_configure()
+{
+    return [
+        'newwanip' => ['sing_box_newwanip:3'],
+    ];
+}
+
+function sing_box_newwanip($verbose = false, $interface_map = null, $family = null)
+{
+    if ($family !== 'inet' || !sing_box_is_enabled()) {
+        return;
+    }
+
+    if (!is_array($interface_map) || count($interface_map) === 0) {
+        return;
+    }
+
+    $interfaces = implode(',', $interface_map);
+    mwexecfb(
+        '/usr/local/sbin/sing-box-readiness --event %s --interfaces %s',
+        ['newwanip', $interfaces]
+    );
+}

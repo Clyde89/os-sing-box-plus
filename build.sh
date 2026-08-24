@@ -42,7 +42,10 @@ if ! command -v fetch >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
 fi
 
 need_file "src/usr/local/etc/sing-box/config.json.sample"
+need_file "src/usr/local/etc/sing-box/readiness.conf.sample"
 need_file "src/usr/local/etc/rc.d/sing-box"
+need_file "src/usr/local/etc/rc.syshook.d/start/70-sing-box-readiness"
+need_file "src/usr/local/sbin/sing-box-readiness"
 need_file "src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf"
 need_file "src/usr/local/etc/inc/plugins.inc.d/sing_box.inc"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Menu/Menu.xml"
@@ -157,7 +160,10 @@ mkdir -p "$STAGEDIR/usr/local/bin"
 install -m 0755 "$DOWNLOADDIR/sing-box" "$STAGEDIR/usr/local/bin/sing-box"
 chmod 0700 "$STAGEDIR/usr/local/etc/sing-box"
 chmod 0644 "$STAGEDIR/usr/local/etc/sing-box/config.json.sample"
+chmod 0644 "$STAGEDIR/usr/local/etc/sing-box/readiness.conf.sample"
 chmod 0755 "$STAGEDIR/usr/local/etc/rc.d/sing-box"
+chmod 0755 "$STAGEDIR/usr/local/etc/rc.syshook.d/start/70-sing-box-readiness"
+chmod 0755 "$STAGEDIR/usr/local/sbin/sing-box-readiness"
 
 echo "==> Формируется список файлов"
 find "$STAGEDIR" -type f | sed "s#^$STAGEDIR##" | sort > "$PLIST"
@@ -180,6 +186,9 @@ echo "==> Формируются метаданные"
     printf 'arch: "%s"\n' "$PKG_ARCH"
     printf 'prefix: "%s"\n' "$PREFIX"
     printf 'flatsize: %s\n' "$FLATSIZE"
+    printf 'deps: {\n'
+    printf '    curl: { origin: "ftp/curl", version: ">=0" }\n'
+    printf '}\n'
     printf 'desc: <<EOD\n'
     cat "$SCRIPT_DIR/packaging/freebsd/pkg-descr"
     printf '\nEOD\n'
