@@ -63,7 +63,7 @@ vpn outbound -> domain_resolver=vpn-dns -> vpn-dns.detour=vpn outbound
 
 На OPNsense 26.7 / FreeBSD 15.1 такой путь был воспроизведён как runtime failure `no route to host` для TCP соединения к DoH endpoint при том, что системный bound connect и PF `route-to` работали.
 
-Подтверждённый рабочий шаблон использует отдельный bootstrap outbound без `domain_resolver`:
+Рабочий шаблон использует отдельный bootstrap outbound без `domain_resolver`:
 
 ```json
 {
@@ -103,6 +103,45 @@ Bootstrap outbound должен наследовать тот же policy source
 
 Генератор конфигурации обязан проверять такие циклы до применения настроек.
 
+Важно: отдельный bootstrap outbound устраняет неправильную DNS topology, но не решает сам по себе boot-order race. В production подтверждено, что процесс sing-box, поднятый во время загрузки OPNsense, может остаться с неработающим DoH dial path даже после того, как PF/PBR и VPN уже полностью готовы. Один manual restart того же binary/config восстанавливает работу.
+
+## Startup lifecycle на OPNsense
+
+Плагин не должен считать наличие `NETWORKING` достаточным условием для запуска policy-bound DNS.
+
+Требуемая последовательность:
+
+```text
+OPNsense network/firewall/gateway bootstrap
+  -> policy source address present
+  -> PF/PBR policy present
+  -> configured gateway reachable
+  -> bound TCP probe to DNS upstream succeeds
+  -> start sing-box
+  -> TUN/listener ready
+  -> policy-bound DNS upstream query succeeds
+  -> end-to-end policy probe succeeds
+  -> HEALTHY
+```
+
+Если raw bound probe к DNS upstream работает, а DNS запрос через уже запущенный sing-box не работает, состояние должно классифицироваться как:
+
+```text
+UNDERLAY READY / SING-BOX DNS TRANSPORT FAILED
+```
+
+В этом случае допускается один ограниченный self-heal restart после полной готовности OPNsense. Бесконечные restart loops запрещены.
+
+Статический `sleep N` не считается полноценным решением: readiness должен определяться фактическим состоянием policy path. Для интеграции с OPNsense предпочтителен поздний plugin startup hook после основной сетевой/firewall конфигурации плюс собственный readiness probe.
+
+## Runtime DNS diagnostics
+
+Нужно различать как минимум три класса ошибок:
+
+1. `no route to host` сразу после boot — подтверждённая boot/startup проблема для policy-bound DoH процесса;
+2. `context deadline exceeded` во время длительной работы — пока не атрибутирован конкретному DNS transport и должен диагностироваться отдельно;
+3. попытки соединения к TUN-side DNS address, например `172.19.0.2:853` — требуют определения источника (клиентский DoT, TUN DNS behavior или иная логика) и не должны автоматически считаться ошибкой vpn-dns.
+
 ## Health
 
 Минимальные уровни диагностики:
@@ -110,9 +149,10 @@ Bootstrap outbound должен наследовать тот же policy source
 1. local: process/listener/TUN/route;
 2. policy: DNS selective/direct и FakeIP;
 3. DNS upstream: реальный запрос через каждый configured policy-bound DNS transport;
-4. egress: реальный выход через выбранный gateway;
-5. end-to-end: доменный запрос через фактический policy path;
-6. client path: проверка DNS redirect -> listener для выбранного клиента.
+4. underlay: raw bound connectivity из policy source к upstream endpoint;
+5. egress: реальный выход через выбранный gateway;
+6. end-to-end: доменный запрос через фактический policy path;
+7. client path: проверка DNS redirect -> listener для выбранного клиента.
 
 Состояние последних переходов должно переживать reboot.
 
@@ -129,6 +169,9 @@ Bootstrap outbound должен наследовать тот же policy source
 - `singbox_plus_dns_udp_up`;
 - `singbox_plus_dns_upstream_up`;
 - `singbox_plus_dns_upstream_latency_ms`;
+- `singbox_plus_startup_ready`;
+- `singbox_plus_startup_wait_seconds`;
+- `singbox_plus_startup_recovery_total`;
 - `singbox_plus_tun_up`;
 - `singbox_plus_fakeip_route_up`;
 - `singbox_plus_gateway_up`;
@@ -174,6 +217,8 @@ Production build не должен использовать плавающий `
 - source/release URL;
 - SHA256;
 - core revision/build provenance.
+
+Перед закреплением startup workaround необходимо повторить boot/DNS regression tests на актуальном stable Vincent/reF1nd core, потому что в более новых ветках upstream уже менялась DNS/dialer логика.
 
 ## Безопасность
 
