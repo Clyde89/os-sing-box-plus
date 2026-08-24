@@ -1,9 +1,9 @@
-# Changelog
+# Журнал изменений
 
-Notable user-facing changes are documented here.
+Здесь фиксируются только значимые пользовательские изменения.
 
-## Unreleased
+## Не выпущено
 
-- Repository reduced to a single sing-box plugin project.
-- Improved service startup and log-directory handling.
-- Added groundwork for WAN-event recovery and health checks.
+- Репозиторий приведён к структуре отдельного плагина sing-box.
+- Улучшена подготовка каталога журналов при запуске службы.
+- Подготовлена инфраструктура для восстановления после изменений WAN и health-проверок.
