@@ -3,7 +3,7 @@
 /*
  * Copyright (C) 2014-2026 Deciso B.V.
  * Copyright (C) 2010 Erik Fonnesbeck
- * Copyright (C) 2008-2010 Ermal Luçi
+ * Copyright (C) 2008-2010 Ermal Luči
  * Copyright (C) 2004-2008 Scott Ullrich <sullrich@gmail.com>
  * Copyright (C) 2006 Daniel S. Haischt
  * Copyright (C) 2003-2004 Manuel Kasper <mk@neon1.net>
@@ -17,7 +17,7 @@
  *
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
- *   documentation and/or other materials provided with the distribution.
+ *    documentation and/or other materials provided with the distribution.
  *
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
  * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
@@ -30,100 +30,27 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
 require_once("guiconfig.inc");
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
-const SINGBOX_CONFIG_FILE = "/usr/local/etc/sing-box/config.json";
-const SINGBOX_BINARY = "/usr/local/bin/sing-box";
-const SINGBOX_LOG_FILE = "/var/log/sing-box.log";
-const STATUS_ENDPOINT = "/sing-box.php?ajax=status";
-const LOGS_ENDPOINT = "/sing-box_log.php";
-const CSRF_TOKEN_KEY = "sing_box_service_csrf_token";
+const SINGBOX_CONFIG_FILE = '/usr/local/etc/sing-box/config.json';
+const SINGBOX_BINARY = '/usr/local/bin/sing-box';
+const SINGBOX_LOG_FILE = '/var/log/sing-box/sing-box.log';
+const STATUS_ENDPOINT = '/sing-box.php?ajax=status';
+const LOGS_ENDPOINT = '/sing-box_log.php';
+const CSRF_TOKEN_KEY = 'sing_box_service_csrf_token';
+const MAX_CONFIG_SIZE = 4194304;
 
-$message = "";
-$message_type = "info";
+$message = '';
+$message_type = 'info';
 
-function e($value)
+function h($value)
 {
     return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-}
-
-function proxy_lang()
-{
-    if (is_readable('/conf/config.xml')) {
-        $config_xml = @file_get_contents('/conf/config.xml');
-        if (is_string($config_xml) && preg_match('/<language>([^<]+)<\/language>/', $config_xml, $matches)) {
-            return trim($matches[1]) === 'zh_CN' ? 'zh' : 'en';
-        }
-    }
-
-    return 'en';
-}
-
-
-function proxy_t($text)
-{
-    static $map = [
-        'zh' => [
-            'Configuration file does not exist; cannot validate.' => '配置文件不存在，无法校验。',
-            'sing-box binary is missing or not executable: %s' => 'sing-box 可执行文件不存在或不可执行：%s',
-            'sing-box configuration validation passed.' => 'sing-box 配置校验通过。',
-            'sing-box configuration validation failed.' => 'sing-box 配置校验失败。',
-            'sing-box service started successfully.' => 'sing-box 服务启动成功！',
-            'sing-box service stopped.' => 'sing-box 服务已停止！',
-            'sing-box service restarted successfully.' => 'sing-box 服务重启成功！',
-            'Failed to start sing-box service.' => 'sing-box 服务启动失败！',
-            'Failed to stop sing-box service.' => 'sing-box 服务停止失败！',
-            'Failed to restart sing-box service.' => 'sing-box 服务重启失败！',
-            'Invalid action.' => '无效的操作！',
-            'Log file does not exist; no need to clear it.' => '日志文件不存在，无需清空。',
-            'Failed to clear the log. Make sure the log file is writable.' => '日志清空失败，请确保日志文件可写。',
-            'Log cleared.' => '日志已清空！',
-            'Failed to clear the log.' => '日志清空失败！',
-            'Configuration content cannot be empty.' => '配置内容不能为空！',
-            'JSON format error: %s' => 'JSON 格式错误：%s',
-            'Configuration directory is not writable: %s' => '配置目录不可写：%s',
-            'Failed to save configuration. Make sure the file is writable.' => '配置保存失败，请确保文件可写。',
-            'Unable to create temporary file.' => '无法创建临时文件。',
-            'Failed to write temporary configuration file.' => '写入临时配置文件失败。',
-            'JSON format is valid, but sing-box configuration validation failed: %s' => 'JSON 格式正确，但 sing-box 配置校验失败：%s',
-            'Failed to save configuration.' => '配置保存失败！',
-            'Configuration saved successfully. %s' => '配置保存成功！%s',
-            'CSRF validation failed. Please refresh the page and try again.' => 'CSRF 校验失败，请刷新页面后重试。',
-            'Configuration file not found. Create or save a configuration first.' => '配置文件未找到，请先创建或保存配置。',
-            'Service Status' => '服务状态',
-            'Checking...' => '检查中...',
-            'Reading service status' => '正在读取服务状态',
-            'Service Control' => '服务控制',
-            'Start' => '启动',
-            'Stop' => '停止',
-            'Restart' => '重启',
-            'Configuration Management' => '配置管理',
-            'Save Configuration' => '保存配置',
-            'Log Viewer' => '日志视图',
-            'Clear Log' => '清空日志',
-            'sing-box is running' => 'sing-box 正在运行',
-            'sing-box is stopped' => 'sing-box 已停止',
-            'Service status is normal' => '服务状态正常',
-            'Service is not running' => '服务未运行',
-            'Status unknown' => '状态未知',
-            'Unable to confirm service status' => '无法确认服务状态',
-            'Status check failed' => '状态检查失败',
-            'Please try again shortly' => '请稍候重试',
-            'Error' => '错误',
-            'Failed to load logs. Please check the network or server status.' => '无法加载日志，请检查网络或服务器状态。',
-        ],
-    ];
-    $lang = proxy_lang();
-    return $map[$lang][$text] ?? $text;
-}
-
-function proxy_js($text)
-{
-    return json_encode(proxy_t($text), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
 }
 
 function generateCsrfToken()
@@ -141,202 +68,189 @@ function getCsrfToken()
 function verifyCsrfToken($token)
 {
     $sessionToken = $_SESSION[CSRF_TOKEN_KEY] ?? '';
-    return !empty($sessionToken) && is_string($token) && hash_equals($sessionToken, $token);
+    return is_string($token) && $sessionToken !== '' && hash_equals($sessionToken, $token);
 }
 
-function execCommand($command)
+function runCommand($command)
 {
     $output = [];
-    $return_var = 0;
-    exec($command . " 2>&1", $output, $return_var);
-    return [$output, $return_var];
+    $status = 0;
+    exec($command . ' 2>&1', $output, $status);
+    return [$output, $status];
 }
 
-function readFileContent($file, $default = "")
+function readConfig()
 {
-    if (!file_exists($file)) {
-        return $default;
+    if (!is_file(SINGBOX_CONFIG_FILE)) {
+        return '';
     }
 
-    $content = file_get_contents($file);
-    return $content !== false ? $content : $default;
+    $content = file_get_contents(SINGBOX_CONFIG_FILE);
+    return $content === false ? '' : $content;
 }
 
-function validateJsonConfig($content)
+function validateJson($content)
 {
     json_decode($content, true);
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        return json_last_error_msg();
-    }
-    return true;
+    return json_last_error() === JSON_ERROR_NONE ? null : json_last_error_msg();
 }
 
-function validateSingBoxConfig($binary, $file)
+function validateSingBoxConfig($path)
 {
-    if (!file_exists($file)) {
-        return [false, proxy_t('Configuration file does not exist; cannot validate.')];
+    if (!is_executable(SINGBOX_BINARY)) {
+        return [false, 'Исполняемый файл sing-box отсутствует или недоступен.'];
     }
 
-    if (!file_exists($binary) || !is_executable($binary)) {
-        return [false, sprintf(proxy_t('sing-box binary is missing or not executable: %s'), $binary)];
+    $command = escapeshellarg(SINGBOX_BINARY) . ' check -c ' . escapeshellarg($path);
+    [$output, $status] = runCommand($command);
+    $details = trim(implode("\n", $output));
+
+    if ($status === 0) {
+        return [true, $details];
     }
 
-    $command = escapeshellarg($binary) . " check -c " . escapeshellarg($file);
-    list($output, $return_var) = execCommand($command);
-    $result = trim(implode("\n", $output));
-
-    if ($return_var === 0) {
-        return [true, $result !== '' ? $result : proxy_t('sing-box configuration validation passed.')];
-    }
-
-    return [false, $result !== '' ? $result : proxy_t('sing-box configuration validation failed.')];
+    return [false, $details !== '' ? $details : 'Проверка конфигурации sing-box завершилась ошибкой.'];
 }
 
-function handleServiceAction($action)
-{
-    $messages = [
-        'start' => [proxy_t('sing-box service started successfully.'), proxy_t('Failed to start sing-box service.')],
-        'stop' => [proxy_t('sing-box service stopped.'), proxy_t('Failed to stop sing-box service.')],
-        'restart' => [proxy_t('sing-box service restarted successfully.'), proxy_t('Failed to restart sing-box service.')],
-    ];
-
-    if (!isset($messages[$action])) {
-        return [false, proxy_t('Invalid action.')];
-    }
-
-    list($output, $return_var) = execCommand("service sing-box " . escapeshellarg($action));
-
-    if ($return_var === 0) {
-        return [true, $messages[$action][0]];
-    }
-
-    $detail = trim(implode("\n", $output));
-    return [false, $messages[$action][1] . ($detail !== '' ? "\n" . $detail : '')];
-}
-
-function getServiceStatus()
-{
-    list($output, $return_var) = execCommand("service sing-box status");
-    return $return_var === 0 ? "running" : "stopped";
-}
-
-function clearLogFile($file)
-{
-    if (!file_exists($file)) {
-        return [proxy_t('Log file does not exist; no need to clear it.'), "warning"];
-    }
-
-    if (!is_writable($file)) {
-        return [proxy_t('Failed to clear the log. Make sure the log file is writable.'), "danger"];
-    }
-
-    return file_put_contents($file, "", LOCK_EX) !== false
-        ? [proxy_t('Log cleared.'), "success"]
-        : [proxy_t('Failed to clear the log.'), "danger"];
-}
-
-function saveConfig($binary, $file, $content)
+function saveConfig($content)
 {
     if (trim($content) === '') {
-        return [false, proxy_t('Configuration content cannot be empty.')];
+        return [false, 'Конфигурация не может быть пустой.'];
     }
 
-    $jsonValidationResult = validateJsonConfig($content);
-    if ($jsonValidationResult !== true) {
-        return [false, sprintf(proxy_t('JSON format error: %s'), $jsonValidationResult)];
+    if (strlen($content) > MAX_CONFIG_SIZE) {
+        return [false, 'Размер конфигурации превышает 4 МиБ.'];
     }
 
-    $dir = dirname($file);
-    if (!is_dir($dir) || !is_writable($dir)) {
-        return [false, sprintf(proxy_t('Configuration directory is not writable: %s'), $dir)];
+    $jsonError = validateJson($content);
+    if ($jsonError !== null) {
+        return [false, 'Некорректный JSON: ' . $jsonError];
     }
 
-    if (file_exists($file) && !is_writable($file)) {
-        return [false, proxy_t('Failed to save configuration. Make sure the file is writable.')];
+    $directory = dirname(SINGBOX_CONFIG_FILE);
+    if (!is_dir($directory) || !is_writable($directory)) {
+        return [false, 'Каталог конфигурации недоступен для записи.'];
     }
 
-    if (strlen($content) > 4 * 1024 * 1024) {
-        return [false, proxy_t('Configuration content is larger than 4 MiB.')];
-    }
-
-    $temp_file = tempnam($dir, '.singbox_cfg_');
-    if ($temp_file === false) {
-        return [false, proxy_t('Unable to create temporary file.')];
+    $tempFile = tempnam($directory, '.singbox_cfg_');
+    if ($tempFile === false) {
+        return [false, 'Не удалось создать временный файл конфигурации.'];
     }
 
     try {
-        if (file_put_contents($temp_file, $content, LOCK_EX) === false) {
-            return [false, proxy_t('Failed to write temporary configuration file.')];
+        if (file_put_contents($tempFile, $content, LOCK_EX) === false) {
+            return [false, 'Не удалось записать временный файл конфигурации.'];
         }
 
-        list($isValid, $checkMessage) = validateSingBoxConfig($binary, $temp_file);
-        if (!$isValid) {
-            return [false, sprintf(proxy_t('JSON format is valid, but sing-box configuration validation failed: %s'), $checkMessage)];
+        @chmod($tempFile, 0600);
+        [$valid, $validationMessage] = validateSingBoxConfig($tempFile);
+        if (!$valid) {
+            return [false, 'Конфигурация не прошла проверку sing-box: ' . $validationMessage];
         }
 
-        if (file_exists($file) && !@copy($file, $file . '.bak')) {
-            return [false, proxy_t('Failed to create configuration backup.')];
+        if (is_file(SINGBOX_CONFIG_FILE) && !@copy(SINGBOX_CONFIG_FILE, SINGBOX_CONFIG_FILE . '.bak')) {
+            return [false, 'Не удалось создать резервную копию текущей конфигурации.'];
         }
 
-        @chmod($temp_file, 0644);
-        if (!@rename($temp_file, $file)) {
-            return [false, proxy_t('Failed to save configuration.')];
+        if (!@rename($tempFile, SINGBOX_CONFIG_FILE)) {
+            return [false, 'Не удалось атомарно заменить конфигурацию.'];
         }
-        $temp_file = '';
-        @chmod($file, 0644);
 
-        return [true, sprintf(proxy_t('Configuration saved successfully. %s'), $checkMessage)];
+        $tempFile = '';
+        @chmod(SINGBOX_CONFIG_FILE, 0600);
+        return [true, 'Конфигурация проверена и сохранена.'];
     } finally {
-        if ($temp_file !== '') {
-            @unlink($temp_file);
+        if ($tempFile !== '') {
+            @unlink($tempFile);
         }
     }
+}
+
+function serviceAction($action)
+{
+    $messages = [
+        'start' => ['Служба sing-box запущена.', 'Не удалось запустить службу sing-box.'],
+        'stop' => ['Служба sing-box остановлена.', 'Не удалось остановить службу sing-box.'],
+        'restart' => ['Служба sing-box перезапущена.', 'Не удалось перезапустить службу sing-box.'],
+    ];
+
+    if (!isset($messages[$action])) {
+        return [false, 'Недопустимое действие.'];
+    }
+
+    [$output, $status] = runCommand('/usr/sbin/service sing-box ' . escapeshellarg($action));
+    if ($status === 0) {
+        return [true, $messages[$action][0]];
+    }
+
+    $details = trim(implode("\n", $output));
+    return [false, $messages[$action][1] . ($details !== '' ? "\n" . $details : '')];
+}
+
+function serviceStatus()
+{
+    [, $status] = runCommand('/usr/sbin/service sing-box status');
+    return $status === 0 ? 'running' : 'stopped';
+}
+
+function clearLog()
+{
+    if (!is_file(SINGBOX_LOG_FILE)) {
+        return [true, 'Журнал пока не создан.'];
+    }
+
+    if (!is_writable(SINGBOX_LOG_FILE)) {
+        return [false, 'Файл журнала недоступен для записи.'];
+    }
+
+    return file_put_contents(SINGBOX_LOG_FILE, '', LOCK_EX) !== false
+        ? [true, 'Журнал очищен.']
+        : [false, 'Не удалось очистить журнал.'];
 }
 
 generateCsrfToken();
 
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'status') {
     header('Content-Type: application/json; charset=UTF-8');
-    echo json_encode(['status' => getServiceStatus()]);
+    echo json_encode(['status' => serviceStatus()], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = trim((string)($_POST['action'] ?? ''));
-    $posted_config = (string)($_POST['config_content'] ?? '');
-
     if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
-        $message = proxy_t('CSRF validation failed. Please refresh the page and try again.');
+        $message = 'Проверка CSRF не пройдена. Обновите страницу и повторите действие.';
         $message_type = 'danger';
     } else {
+        $action = trim((string)($_POST['action'] ?? ''));
+
         switch ($action) {
             case 'save_config':
-                list($saveSuccess, $saveMessage) = saveConfig(SINGBOX_BINARY, SINGBOX_CONFIG_FILE, $posted_config);
-                $message = $saveMessage;
-                $message_type = $saveSuccess ? 'success' : 'danger';
+                [$success, $message] = saveConfig((string)($_POST['config_content'] ?? ''));
+                $message_type = $success ? 'success' : 'danger';
                 break;
             case 'start':
             case 'stop':
             case 'restart':
-                list($actionSuccess, $actionMessage) = handleServiceAction($action);
-                $message = $actionSuccess ? '' : $actionMessage;
-                $message_type = $actionSuccess ? 'info' : 'danger';
+                [$success, $message] = serviceAction($action);
+                $message_type = $success ? 'success' : 'danger';
                 break;
             case 'clear_log':
-                list($message, $message_type) = clearLogFile(SINGBOX_LOG_FILE);
+                [$success, $message] = clearLog();
+                $message_type = $success ? 'success' : 'danger';
                 break;
             default:
-                $message = proxy_t('Invalid action.');
+                $message = 'Недопустимое действие.';
                 $message_type = 'danger';
                 break;
         }
     }
 }
 
-$config_raw_content = readFileContent(SINGBOX_CONFIG_FILE, '');
-$csrf_token = getCsrfToken();
-if ($config_raw_content === '' && !file_exists(SINGBOX_CONFIG_FILE) && $message === '') {
-    $message = proxy_t('Configuration file not found. Create or save a configuration first.');
+$configContent = readConfig();
+$csrfToken = getCsrfToken();
+
+if ($configContent === '' && !is_file(SINGBOX_CONFIG_FILE) && $message === '') {
+    $message = 'Рабочая конфигурация отсутствует. Сохраните конфигурацию перед запуском службы.';
     $message_type = 'warning';
 }
 
@@ -345,42 +259,47 @@ include("fbegin.inc");
 ?>
 
 <style>
-    .proxy-suite-box-title {
+    .singbox-title {
         padding: 12px 14px;
         border-bottom: 1px solid #eeeeee;
         font-size: 14px;
         font-weight: 600;
     }
 
-    .proxy-suite-box-body {
+    .singbox-body {
         padding: 14px;
     }
 
-    .proxy-suite-editor,
-    .proxy-suite-log {
+    .singbox-editor,
+    .singbox-log {
         max-width: none;
         font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
         font-size: 14px;
-        line-height: 1.25;
+        line-height: 1.3;
         white-space: pre;
         overflow-wrap: normal;
         resize: vertical;
     }
 
-    .proxy-suite-toolbar .btn {
+    .singbox-toolbar .btn {
         margin-right: 4px;
-        margin-bottom: 0;
     }
 
-    .proxy-suite-status {
+    .singbox-status {
         margin-bottom: 0;
         padding: 12px 18px;
     }
 
-    .proxy-suite-status .proxy-suite-status-title {
+    .singbox-status-title {
         font-weight: 600;
         margin-left: 8px;
         margin-right: 12px;
+    }
+
+    .singbox-help {
+        margin-top: 8px;
+        margin-bottom: 0;
+        color: #777777;
     }
 </style>
 
@@ -389,22 +308,20 @@ include("fbegin.inc");
         <div class="row">
             <?php if ($message !== ''): ?>
                 <div class="col-xs-12">
-                    <div id="page-message" class="alert alert-<?= e($message_type); ?>">
-                        <pre style="margin:0;border:0;background:transparent;padding:0;white-space:pre-wrap;word-break:break-word;"><?= e($message); ?></pre>
+                    <div class="alert alert-<?= h($message_type); ?>">
+                        <pre style="margin:0;border:0;background:transparent;padding:0;white-space:pre-wrap;word-break:break-word;"><?= h($message); ?></pre>
                     </div>
                 </div>
             <?php endif; ?>
 
             <section class="col-xs-12">
                 <div class="content-box">
-                    <div class="proxy-suite-box-title">
-                        <i class="fa fa-heartbeat text-muted"></i> <?= e(proxy_t('Service Status')); ?>
-                    </div>
-                    <div class="proxy-suite-box-body">
-                        <div id="sing-box-status" class="alert alert-warning proxy-suite-status">
+                    <div class="singbox-title"><i class="fa fa-heartbeat text-muted"></i> Состояние службы</div>
+                    <div class="singbox-body">
+                        <div id="sing-box-status" class="alert alert-warning singbox-status">
                             <i class="fa fa-refresh fa-spin"></i>
-                            <span class="proxy-suite-status-title"><?= e(proxy_t('Checking...')); ?></span>
-                            <span><?= e(proxy_t('Reading service status')); ?></span>
+                            <span class="singbox-status-title">Проверка...</span>
+                            <span>Получение состояния sing-box</span>
                         </div>
                     </div>
                 </div>
@@ -412,21 +329,13 @@ include("fbegin.inc");
 
             <section class="col-xs-12">
                 <div class="content-box">
-                    <div class="proxy-suite-box-title">
-                        <i class="fa fa-sliders text-muted"></i> <?= e(proxy_t('Service Control')); ?>
-                    </div>
-                    <div class="proxy-suite-box-body">
-                        <form method="post" class="form-inline proxy-suite-toolbar">
-                            <input type="hidden" name="csrf_token" value="<?= e($csrf_token); ?>">
-                            <button type="submit" name="action" value="start" class="btn btn-success">
-                                <i class="fa fa-play"></i> <?= e(proxy_t('Start')); ?>
-                            </button>
-                            <button type="submit" name="action" value="stop" class="btn btn-danger">
-                                <i class="fa fa-stop"></i> <?= e(proxy_t('Stop')); ?>
-                            </button>
-                            <button type="submit" name="action" value="restart" class="btn btn-warning">
-                                <i class="fa fa-refresh"></i> <?= e(proxy_t('Restart')); ?>
-                            </button>
+                    <div class="singbox-title"><i class="fa fa-sliders text-muted"></i> Управление службой</div>
+                    <div class="singbox-body">
+                        <form method="post" class="form-inline singbox-toolbar">
+                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken); ?>">
+                            <button type="submit" name="action" value="start" class="btn btn-success"><i class="fa fa-play"></i> Запустить</button>
+                            <button type="submit" name="action" value="stop" class="btn btn-danger"><i class="fa fa-stop"></i> Остановить</button>
+                            <button type="submit" name="action" value="restart" class="btn btn-warning"><i class="fa fa-refresh"></i> Перезапустить</button>
                         </form>
                     </div>
                 </div>
@@ -434,36 +343,29 @@ include("fbegin.inc");
 
             <section class="col-xs-12">
                 <div class="content-box">
-                    <div class="proxy-suite-box-title">
-                        <i class="fa fa-file-text-o text-muted"></i> <?= e(proxy_t('Configuration Management')); ?>
-                    </div>
-                    <div class="proxy-suite-box-body">
-                    <form method="post">
-                        <input type="hidden" name="csrf_token" value="<?= e($csrf_token); ?>">
-                        <textarea id="config_content" name="config_content" rows="14" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" class="form-control proxy-suite-editor"><?= e($config_raw_content); ?></textarea>
-                        <br>
-                        <button type="submit" name="action" value="save_config" class="btn btn-primary">
-                            <i class="fa fa-save"></i> <?= e(proxy_t('Save Configuration')); ?>
-                        </button>
-                    </form>
+                    <div class="singbox-title"><i class="fa fa-file-code-o text-muted"></i> Конфигурация</div>
+                    <div class="singbox-body">
+                        <form method="post">
+                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken); ?>">
+                            <textarea id="config_content" name="config_content" rows="16" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" class="form-control singbox-editor"><?= h($configContent); ?></textarea>
+                            <p class="singbox-help">Перед сохранением проверяются синтаксис JSON и команда <code>sing-box check</code>. Текущая конфигурация сохраняется в резервную копию.</p>
+                            <br>
+                            <button type="submit" name="action" value="save_config" class="btn btn-primary"><i class="fa fa-save"></i> Проверить и сохранить</button>
+                        </form>
                     </div>
                 </div>
             </section>
 
             <section class="col-xs-12">
                 <div class="content-box">
-                    <div class="proxy-suite-box-title">
-                        <i class="fa fa-file-text text-muted"></i> <?= e(proxy_t('Log Viewer')); ?>
-                    </div>
-                    <div class="proxy-suite-box-body">
-                        <form method="post" class="form-inline proxy-suite-toolbar">
-                            <input type="hidden" name="csrf_token" value="<?= e($csrf_token); ?>">
-                            <button type="submit" name="action" value="clear_log" class="btn btn-default">
-                                <i class="fa fa-trash"></i> <?= e(proxy_t('Clear Log')); ?>
-                            </button>
+                    <div class="singbox-title"><i class="fa fa-file-text text-muted"></i> Журнал</div>
+                    <div class="singbox-body">
+                        <form method="post" class="form-inline singbox-toolbar">
+                            <input type="hidden" name="csrf_token" value="<?= h($csrfToken); ?>">
+                            <button type="submit" name="action" value="clear_log" class="btn btn-default"><i class="fa fa-trash"></i> Очистить журнал</button>
                         </form>
                         <br>
-                        <textarea id="log-viewer" rows="14" class="form-control proxy-suite-log" readonly></textarea>
+                        <textarea id="log-viewer" rows="14" class="form-control singbox-log" readonly></textarea>
                     </div>
                 </div>
             </section>
@@ -476,62 +378,54 @@ include("fbegin.inc");
     const LOGS_ENDPOINT = <?= json_encode(LOGS_ENDPOINT, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 
     function setStatus(state) {
-        const statusElement = document.getElementById('sing-box-status');
-        const statusMap = {
+        const element = document.getElementById('sing-box-status');
+        const states = {
             running: {
-                className: 'alert alert-success proxy-suite-status',
-                html: '<i class="fa fa-check-circle text-success"></i> <span class="proxy-suite-status-title">' + <?= proxy_js('sing-box is running'); ?> + '</span><span>' + <?= proxy_js('Service status is normal'); ?> + '</span>'
+                className: 'alert alert-success singbox-status',
+                html: '<i class="fa fa-check-circle text-success"></i> <span class="singbox-status-title">sing-box запущен</span><span>Служба работает</span>'
             },
             stopped: {
-                className: 'alert alert-danger proxy-suite-status',
-                html: '<i class="fa fa-times-circle text-danger"></i> <span class="proxy-suite-status-title">' + <?= proxy_js('sing-box is stopped'); ?> + '</span><span>' + <?= proxy_js('Service is not running'); ?> + '</span>'
-            },
-            unknown: {
-                className: 'alert alert-warning proxy-suite-status',
-                html: '<i class="fa fa-exclamation-circle text-warning"></i> <span class="proxy-suite-status-title">' + <?= proxy_js('Status unknown'); ?> + '</span><span>' + <?= proxy_js('Unable to confirm service status'); ?> + '</span>'
+                className: 'alert alert-danger singbox-status',
+                html: '<i class="fa fa-times-circle text-danger"></i> <span class="singbox-status-title">sing-box остановлен</span><span>Служба не работает</span>'
             },
             error: {
-                className: 'alert alert-danger proxy-suite-status',
-                html: '<i class="fa fa-times-circle text-danger"></i> <span class="proxy-suite-status-title">' + <?= proxy_js('Status check failed'); ?> + '</span><span>' + <?= proxy_js('Please try again shortly'); ?> + '</span>'
+                className: 'alert alert-warning singbox-status',
+                html: '<i class="fa fa-exclamation-circle text-warning"></i> <span class="singbox-status-title">Состояние неизвестно</span><span>Не удалось получить состояние службы</span>'
             }
         };
-        const nextState = statusMap[state] || statusMap.unknown;
-        statusElement.className = nextState.className;
-        statusElement.innerHTML = nextState.html;
+
+        const next = states[state] || states.error;
+        element.className = next.className;
+        element.innerHTML = next.html;
     }
 
     function refreshStatus() {
-        fetch(STATUS_ENDPOINT, { cache: 'no-store' })
+        fetch(STATUS_ENDPOINT, {cache: 'no-store'})
             .then(response => response.json())
             .then(data => setStatus(data.status))
             .catch(() => setStatus('error'));
     }
 
     function refreshLogs() {
-        fetch(LOGS_ENDPOINT, { cache: 'no-store' })
+        fetch(LOGS_ENDPOINT, {cache: 'no-store'})
             .then(response => response.text())
-            .then(logContent => {
-                const logViewer = document.getElementById('log-viewer');
-                const shouldStickToBottom =
-                    logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - 20;
-
-                logViewer.value = logContent;
-
-                if (shouldStickToBottom) {
-                    logViewer.scrollTop = logViewer.scrollHeight;
+            .then(content => {
+                const viewer = document.getElementById('log-viewer');
+                const stickToBottom = viewer.scrollTop + viewer.clientHeight >= viewer.scrollHeight - 20;
+                viewer.value = content;
+                if (stickToBottom) {
+                    viewer.scrollTop = viewer.scrollHeight;
                 }
             })
             .catch(() => {
-                const logViewer = document.getElementById('log-viewer');
-                logViewer.value = '[' + <?= proxy_js('Error'); ?> + '] ' + <?= proxy_js('Failed to load logs. Please check the network or server status.'); ?>;
-                logViewer.scrollTop = logViewer.scrollHeight;
+                document.getElementById('log-viewer').value = '[Ошибка] Не удалось загрузить журнал sing-box.';
             });
     }
 
     document.addEventListener('DOMContentLoaded', () => {
         refreshStatus();
         refreshLogs();
-        setInterval(refreshStatus, 2000);
+        setInterval(refreshStatus, 3000);
         setInterval(refreshLogs, 5000);
     });
 </script>
