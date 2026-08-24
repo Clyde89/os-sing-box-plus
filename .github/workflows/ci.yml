@@ -26,11 +26,14 @@ jobs:
           test -d packaging/freebsd
           test -d tests
           test -f tests/readiness-gating.sh
+          test -f tests/migrate-legacy.sh
+          test -f tests/stubs/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
           test -f src/usr/local/etc/sing-box/readiness.conf.sample
           test -f src/usr/local/etc/rc.syshook.d/start/70-sing-box-readiness
           test -f src/usr/local/sbin/sing-box-readiness
+          test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
           test ! -e src/usr/local/etc/sing-box/config.json
           test ! -e src/usr/local/etc/sing-box/readiness.conf
           test ! -e src/usr/bin/sing_box_sub
@@ -43,6 +46,10 @@ jobs:
           grep -q '^SING_BOX_READINESS_UNDERLAY_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_POLICY_SUFFIX=""$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_E2E_NAME=""$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^LEGACY_CUTOFF_VERSION="1.0.2"$' packaging/freebsd/+PRE_INSTALL
+          grep -q 'config.xml.legacy' packaging/freebsd/+PRE_INSTALL
+          grep -q 'migrate_legacy.php' packaging/freebsd/+POST_INSTALL
+          grep -q '762b3ec8-79c2-48b4-9793-c653bb3d2265' src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
           if grep -q '/releases/latest/' build.sh; then
             echo 'Обнаружена плавающая ссылка releases/latest' >&2
             exit 1
@@ -92,6 +99,12 @@ jobs:
           set -euo pipefail
           tests/readiness-gating.sh
 
+      - name: Проверка миграции legacy-объектов OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests/migrate-legacy.sh
+
       - name: Установка PHP CLI
         shell: bash
         run: |
@@ -105,4 +118,4 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' file; do
             php -l "$file"
-          done < <(find src -type f -name '*.php' -print0)
+          done < <(find src tests -type f -name '*.php' -print0)
