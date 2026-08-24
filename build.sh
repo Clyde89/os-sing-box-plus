@@ -40,7 +40,7 @@ if ! command -v fetch >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
     die "fetch or curl command not found."
 fi
 
-need_file "src/usr/local/etc/sing-box/config.json"
+need_file "src/usr/local/etc/sing-box/config.json.sample"
 need_file "src/usr/local/etc/rc.d/sing-box"
 need_file "src/etc/rc.conf.d/sing_box"
 need_file "src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf"
@@ -141,7 +141,7 @@ prepare_binary "$SING_BOX_ASSET" "$SING_BOX_DOWNLOAD_URL" "$DOWNLOADDIR/sing-box
 mkdir -p "$STAGEDIR/usr/local/bin"
 install -m 0755 "$DOWNLOADDIR/sing-box" "$STAGEDIR/usr/local/bin/sing-box"
 chmod 0700 "$STAGEDIR/usr/local/etc/sing-box"
-chmod 0600 "$STAGEDIR/usr/local/etc/sing-box/config.json"
+chmod 0644 "$STAGEDIR/usr/local/etc/sing-box/config.json.sample"
 chmod 0755 "$STAGEDIR/usr/local/etc/rc.d/sing-box"
 
 echo "==> Generating plist"
