@@ -3,9 +3,9 @@ set -u
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 TAG="sing-box-readiness"
-CONFIG_FILE="/usr/local/etc/sing-box/readiness.conf"
-RC_CONF_FILE="/etc/rc.conf.d/sing_box"
-LOCK_DIR="/var/run/sing-box-readiness.lock"
+CONFIG_FILE="${SING_BOX_READINESS_CONFIG_FILE:-/usr/local/etc/sing-box/readiness.conf}"
+RC_CONF_FILE="${SING_BOX_READINESS_RC_CONF_FILE:-/etc/rc.conf.d/sing_box}"
+LOCK_DIR="${SING_BOX_READINESS_LOCK_DIR:-/var/run/sing-box-readiness.lock}"
 EVENT="manual"
 EVENT_INTERFACES=""
 DNS_OK=0
