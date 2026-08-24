@@ -47,6 +47,7 @@ need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Menu/Menu.xml"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/ACL/ACL.xml"
 need_file "src/usr/local/www/sing-box.php"
 need_file "src/usr/local/www/sing-box_log.php"
+need_file "packaging/freebsd/+PRE_INSTALL"
 need_file "packaging/freebsd/+POST_INSTALL"
 need_file "packaging/freebsd/+PRE_DEINSTALL"
 need_file "packaging/freebsd/+POST_DEINSTALL"
@@ -174,6 +175,9 @@ echo "==> Формируются метаданные"
     done < "$PLIST"
     printf '}\n'
     printf 'scripts: {\n'
+    printf '    "pre-install": <<EOS\n'
+    cat "$SCRIPT_DIR/packaging/freebsd/+PRE_INSTALL"
+    printf '\nEOS\n'
     printf '    "post-install": <<EOS\n'
     cat "$SCRIPT_DIR/packaging/freebsd/+POST_INSTALL"
     printf '\nEOS\n'

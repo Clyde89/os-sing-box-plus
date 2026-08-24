@@ -1,4 +1,5 @@
 #!/bin/sh
+set -eu
 
 SING_BOX_DIR="/usr/local/etc/sing-box"
 SING_BOX_CONFIG="${SING_BOX_DIR}/config.json"
@@ -6,6 +7,8 @@ SING_BOX_SAMPLE="${SING_BOX_DIR}/config.json.sample"
 SING_BOX_LOG_DIR="/var/log/sing-box"
 SING_BOX_LOG="${SING_BOX_LOG_DIR}/sing-box.log"
 RC_CONF_FILE="/etc/rc.conf.d/sing_box"
+MIGRATION_DIR="/var/db/os-sing-box"
+MIGRATION_FILE="${MIGRATION_DIR}/config.json.upgrade"
 
 echo "===> Настраивается os-sing-box"
 
@@ -19,8 +22,16 @@ touch "$SING_BOX_LOG"
 chown root:wheel "$SING_BOX_LOG"
 chmod 0640 "$SING_BOX_LOG"
 
-if [ ! -f "$SING_BOX_CONFIG" ] && [ -f "$SING_BOX_SAMPLE" ]; then
+if [ -f "$MIGRATION_FILE" ]; then
+    echo "===> Восстанавливается пользовательская конфигурация sing-box после обновления"
+    install -d -o root -g wheel -m 0700 "$SING_BOX_DIR"
+    install -o root -g wheel -m 0600 "$MIGRATION_FILE" "$SING_BOX_CONFIG"
+    rm -f "$MIGRATION_FILE"
+    rmdir "$MIGRATION_DIR" 2>/dev/null || true
+elif [ ! -f "$SING_BOX_CONFIG" ] && [ -f "$SING_BOX_SAMPLE" ]; then
     install -o root -g wheel -m 0600 "$SING_BOX_SAMPLE" "$SING_BOX_CONFIG"
+elif [ -f "$SING_BOX_CONFIG" ]; then
+    chmod 0600 "$SING_BOX_CONFIG"
 fi
 
 rm -f /usr/local/www/services_sing_box.php /usr/local/www/status_sing_box.php

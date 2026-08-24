@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+CONFIG_FILE="/usr/local/etc/sing-box/config.json"
+MIGRATION_DIR="/var/db/os-sing-box"
+MIGRATION_FILE="${MIGRATION_DIR}/config.json.upgrade"
+
+if [ -n "${PKG_UPGRADE:-}" ] && [ -f "$CONFIG_FILE" ]; then
+    echo "===> Сохраняется пользовательская конфигурация sing-box перед обновлением"
+    install -d -o root -g wheel -m 0700 "$MIGRATION_DIR"
+    install -o root -g wheel -m 0600 "$CONFIG_FILE" "$MIGRATION_FILE"
+fi
