@@ -1,19 +1,82 @@
 #!/bin/sh
+set -u
 
 PID_FILE="/var/run/sing-box.pid"
+
+wait_for_exit()
+{
+    pid="$1"
+    timeout="$2"
+
+    while [ "$timeout" -gt 0 ]; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+        timeout=$((timeout - 1))
+    done
+
+    return 1
+}
+
+read_pid()
+{
+    [ -f "$PID_FILE" ] || return 1
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    case "$pid" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+    esac
+    printf '%s\n' "$pid"
+}
+
+process_is_sing_box()
+{
+    pid="$1"
+    kill -0 "$pid" 2>/dev/null || return 1
+    proc_comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+    case "$proc_comm" in
+        sing-box|*/sing-box)
+            return 0
+            ;;
+    esac
+    return 1
+}
 
 echo "===> Останавливается sing-box"
 service sing-box stop >/dev/null 2>&1 || true
 
-if [ -f "$PID_FILE" ]; then
-    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        proc_comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
-        case "$proc_comm" in
-            sing-box|*/sing-box)
-                kill "$pid" 2>/dev/null || true
-                ;;
-        esac
-    fi
-    rm -f "$PID_FILE"
+if [ ! -f "$PID_FILE" ]; then
+    exit 0
 fi
+
+pid="$(read_pid || true)"
+if [ -z "$pid" ]; then
+    rm -f "$PID_FILE"
+    exit 0
+fi
+
+if ! kill -0 "$pid" 2>/dev/null; then
+    rm -f "$PID_FILE"
+    exit 0
+fi
+
+if ! process_is_sing_box "$pid"; then
+    echo "===> PID-файл sing-box указывал на другой процесс и был удалён"
+    rm -f "$PID_FILE"
+    exit 0
+fi
+
+echo "===> Выполняется принудительное завершение оставшегося процесса sing-box"
+kill "$pid" 2>/dev/null || true
+if ! wait_for_exit "$pid" 5; then
+    kill -KILL "$pid" 2>/dev/null || true
+    if ! wait_for_exit "$pid" 2; then
+        echo "Ошибка: процесс sing-box не завершился; удаление пакета остановлено" >&2
+        exit 1
+    fi
+fi
+
+rm -f "$PID_FILE"
+exit 0
