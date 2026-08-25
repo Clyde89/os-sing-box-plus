@@ -64,6 +64,7 @@ final class RuntimeConfigBuilder
             $policyOutboundMode,
             $policyBindAddress
         );
+        PolicyPlanValidator::assertValid($policyPlan);
         $policyRequired = $policyPlan['required'] === true;
 
         $dnsServers = [
@@ -205,6 +206,7 @@ final class RuntimeConfigBuilder
                 'policy_bind_address' => $policyBindAddress,
             ],
             'policy_plan' => $policyPlan,
+            'policy_sha256' => PolicyPlanValidator::checksum($policyPlan),
             'warnings' => $warnings,
             'apply_ready' => $warnings === [],
         ];
