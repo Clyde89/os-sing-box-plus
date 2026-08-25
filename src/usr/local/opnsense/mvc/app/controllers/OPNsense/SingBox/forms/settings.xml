@@ -17,13 +17,13 @@
         <label>Домены и DNS-имена для перенаправления</label>
         <type>textbox</type>
         <height>8</height>
-        <help>По одному доменному имени на строку. Поддерживаются точные имена и шаблоны вида *.example.org. Для IDN используйте punycode.</help>
+        <help>По одному доменному имени на строку. Поддерживаются точные имена и шаблоны вида *.example.org. Для IDN используется punycode.</help>
     </field>
     <field>
         <id>settings.dns.listenAddress</id>
         <label>Адрес DNS-listener</label>
         <type>text</type>
-        <help>Локальный адрес, на котором sing-box будет принимать DNS-запросы.</help>
+        <help>Локальный адрес, на котором sing-box принимает DNS-запросы.</help>
     </field>
     <field>
         <id>settings.dns.listenPort</id>
