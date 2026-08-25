@@ -17,7 +17,7 @@
         <label>Домены и DNS-имена для перенаправления</label>
         <type>textbox</type>
         <height>8</height>
-        <help>По одному доменному имени на строку. Поддерживаются точные имена и шаблоны вида *.example.org. Для IDN используется punycode.</help>
+        <help>По одному доменному имени на строку. Поддерживаются точные имена и шаблоны вида *.example.org. Для IDN требуется запись в формате punycode.</help>
     </field>
     <field>
         <id>settings.dns.listenAddress</id>
