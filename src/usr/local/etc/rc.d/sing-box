@@ -27,6 +27,31 @@ status_cmd="${name}_status"
 load_rc_config $name
 : "${sing_box_enable:=no}"
 
+read_pid() {
+    [ -f "$pidfile" ] || return 1
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    case "$pid" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+    esac
+    printf '%s\n' "$pid"
+}
+
+process_is_sing_box() {
+    pid="$1"
+    kill -0 "$pid" 2>/dev/null || return 1
+
+    proc_comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+    case "$proc_comm" in
+        sing-box|*/sing-box)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
 wait_for_exit() {
     pid="$1"
     timeout="${2:-10}"
@@ -49,6 +74,25 @@ ensure_log_path() {
     chmod 640 "$logfile" || return 1
 }
 
+remove_stale_pidfile() {
+    [ -f "$pidfile" ] || return 0
+    rm -f "$pidfile"
+}
+
+cleanup_failed_start() {
+    pid="$1"
+
+    if process_is_sing_box "$pid"; then
+        kill "$pid" 2>/dev/null || true
+        if ! wait_for_exit "$pid" 5; then
+            kill -KILL "$pid" 2>/dev/null || true
+            wait_for_exit "$pid" 2 || true
+        fi
+    fi
+
+    remove_stale_pidfile
+}
+
 sing_box_start() {
     echo "Запуск sing-box..."
 
@@ -57,9 +101,19 @@ sing_box_start() {
         return 1
     fi
 
-    if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-        echo "Служба sing-box уже запущена."
-        return 1
+    if [ -f "$pidfile" ]; then
+        existing_pid="$(read_pid || true)"
+        if [ -n "$existing_pid" ] && process_is_sing_box "$existing_pid"; then
+            echo "Служба sing-box уже запущена, PID $existing_pid."
+            return 0
+        fi
+
+        if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
+            echo "Устаревший PID-файл указывал на другой процесс; PID-файл удалён."
+        else
+            echo "Устаревший PID-файл удалён."
+        fi
+        remove_stale_pidfile
     fi
 
     if service mihomo status >/dev/null 2>&1; then
@@ -78,11 +132,14 @@ sing_box_start() {
     fi
 
     nohup "$command" run -c "$config" >> "$logfile" 2>&1 &
-    echo $! > "$pidfile"
+    started_pid=$!
+    printf '%s\n' "$started_pid" > "$pidfile"
+    chmod 0600 "$pidfile"
+
     sleep 1
-    if ! kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+    if ! process_is_sing_box "$started_pid"; then
         echo "Процесс sing-box завершился во время запуска."
-        rm -f "$pidfile"
+        cleanup_failed_start "$started_pid"
         return 1
     fi
 
@@ -91,9 +148,9 @@ sing_box_start() {
         if ifconfig tun_singbox >/dev/null 2>&1; then
             break
         fi
-        if ! kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+        if ! process_is_sing_box "$started_pid"; then
             echo "Процесс sing-box завершился до создания tun_singbox."
-            rm -f "$pidfile"
+            cleanup_failed_start "$started_pid"
             return 1
         fi
         sleep 1
@@ -101,57 +158,75 @@ sing_box_start() {
     done
 
     if ! ifconfig tun_singbox >/dev/null 2>&1; then
-        echo "Интерфейс tun_singbox не был создан за 20 секунд."
+        echo "Интерфейс tun_singbox не был создан за 20 секунд; запуск отменён."
+        cleanup_failed_start "$started_pid"
         return 1
     fi
 
-    echo "Служба запущена, PID $(cat "$pidfile")."
+    echo "Служба запущена, PID $started_pid."
 }
 
 sing_box_stop() {
     echo "Остановка sing-box..."
 
-    if [ -f "$pidfile" ]; then
-        pid=$(cat "$pidfile")
-        if kill -0 "$pid" 2>/dev/null; then
-            proc_comm=$(ps -p "$pid" -o comm= 2>/dev/null)
-            case "$proc_comm" in
-                sing-box|*/sing-box)
-                    if kill "$pid" && wait_for_exit "$pid" 10; then
-                        rm -f "$pidfile"
-                        echo "Служба остановлена."
-                    else
-                        echo "Превышено время ожидания остановки sing-box."
-                        return 1
-                    fi
-                    ;;
-                *)
-                    echo "PID-файл указывает на другой процесс: $pid ($proc_comm)."
-                    return 1
-                    ;;
-            esac
-        else
-            rm -f "$pidfile"
-            echo "Устаревший PID-файл удалён."
-        fi
-    else
+    if [ ! -f "$pidfile" ]; then
         echo "Служба sing-box не запущена: PID-файл отсутствует."
+        return 0
     fi
+
+    pid="$(read_pid || true)"
+    if [ -z "$pid" ]; then
+        echo "Некорректный PID-файл удалён."
+        remove_stale_pidfile
+        return 0
+    fi
+
+    if ! kill -0 "$pid" 2>/dev/null; then
+        echo "Устаревший PID-файл удалён."
+        remove_stale_pidfile
+        return 0
+    fi
+
+    if ! process_is_sing_box "$pid"; then
+        proc_comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+        echo "PID-файл указывал на другой процесс и был удалён: $pid (${proc_comm:-неизвестно})."
+        remove_stale_pidfile
+        return 0
+    fi
+
+    if kill "$pid" && wait_for_exit "$pid" 10; then
+        remove_stale_pidfile
+        echo "Служба остановлена."
+        return 0
+    fi
+
+    echo "Превышено время ожидания остановки sing-box."
+    return 1
 }
 
 sing_box_status() {
-    if [ -f "$pidfile" ]; then
-        pid=$(cat "$pidfile")
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "Служба sing-box работает, PID $pid."
-            return 0
-        fi
-
-        echo "PID-файл найден, но процесс sing-box не работает."
+    if [ ! -f "$pidfile" ]; then
+        echo "Служба sing-box не запущена."
         return 1
     fi
 
-    echo "Служба sing-box не запущена."
+    pid="$(read_pid || true)"
+    if [ -z "$pid" ]; then
+        echo "PID-файл sing-box некорректен."
+        return 1
+    fi
+
+    if process_is_sing_box "$pid"; then
+        echo "Служба sing-box работает, PID $pid."
+        return 0
+    fi
+
+    if kill -0 "$pid" 2>/dev/null; then
+        proc_comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+        echo "PID-файл sing-box указывает на другой процесс: $pid (${proc_comm:-неизвестно})."
+    else
+        echo "PID-файл найден, но процесс sing-box не работает."
+    fi
     return 1
 }
 
