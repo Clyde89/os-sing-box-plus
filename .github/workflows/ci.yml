@@ -53,6 +53,7 @@ jobs:
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/DomainListField.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/ClientListField.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/CaptureInterfaceField.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/FakeIpRangeField.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php
@@ -80,6 +81,7 @@ jobs:
           grep -q 'Базовая конфигурация проверена sing-box' build.sh
           grep -q 'Runtime/SelectorCompiler.php' build.sh
           grep -q 'Runtime/PolicyPlanBuilder.php' build.sh
+          grep -q 'FieldTypes/CaptureInterfaceField.php' build.sh
           grep -q 'FieldTypes/FakeIpRangeField.php' build.sh
           grep -q '^SING_BOX_READINESS_ENABLE="NO"$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_SOURCE_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
@@ -92,14 +94,17 @@ jobs:
           grep -q 'migrate_legacy.php' packaging/freebsd/+POST_INSTALL
           grep -q '762b3ec8-79c2-48b4-9793-c653bb3d2265' src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
           grep -q '"product_version":"1.1.0"' src/usr/local/opnsense/version/sing-box
+          grep -Fq '<interfaces type=".\CaptureInterfaceField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -Fq '<clients type=".\ClientListField"/>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -Fq '<redirectDomains type=".\DomainListField"/>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -Fq '<fakeIpRange type=".\FakeIpRangeField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<Default>198.18.0.0/15</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<Default>selected</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<id>settings.capture.interfaces</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q '<id>settings.capture.clients</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q '<id>settings.dns.redirectDomains</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q '<id>settings.dns.fakeIpRange</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q 'validateCaptureInterfaces' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
           grep -q 'validateIpv4Network' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
           grep -q 'function previewAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
           grep -q 'function applyAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
@@ -108,6 +113,7 @@ jobs:
           grep -q 'fakeip-dns' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           grep -q 'PolicyPlanBuilder::build' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           grep -q "'schema_version'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
+          grep -q "'capture_interfaces'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
           grep -q "'operations'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
           grep -q "'dns_redirect'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
           grep -q "'fakeip_route'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
@@ -230,7 +236,7 @@ jobs:
             php -l "$file"
           done < <(find src tests -type f -name '*.php' -print0)
 
-      - name: Проверка валидации доменов и клиентов
+      - name: Проверка валидации доменов, клиентов и интерфейсов
         shell: bash
         run: |
           set -euo pipefail
