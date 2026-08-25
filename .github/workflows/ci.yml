@@ -30,6 +30,7 @@ jobs:
           test -f tests/migrate-legacy-cases.sh
           test -f tests/service-lifecycle-static.sh
           test -f tests/package-install-static.sh
+          test -f tests/webui-safety-static.sh
           test -f tests/stubs/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
@@ -123,6 +124,12 @@ jobs:
         run: |
           set -euo pipefail
           sh tests/package-install-static.sh
+
+      - name: Проверка безопасности первоначальной настройки WebUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/webui-safety-static.sh
 
       - name: Проверка безопасного отключения восстановления
         shell: bash
