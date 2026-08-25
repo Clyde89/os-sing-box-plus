@@ -20,6 +20,10 @@
             return labels[state] || 'Состояние не определено';
         }
 
+        function captureModeLabel(mode) {
+            return mode === 'all_lan' ? 'Весь локальный трафик' : 'Только выбранные клиенты';
+        }
+
         function renderPolicySummary(data) {
             const plan = data && data.policy_plan ? data.policy_plan : {};
             const selectors = data && data.selectors ? data.selectors : {};
@@ -27,6 +31,10 @@
             const compiledClients = Array.isArray(plan.source_ip_cidr) ? plan.source_ip_cidr : [];
             const domains = Array.isArray(plan.domain) ? plan.domain : [];
             const suffixes = Array.isArray(plan.domain_suffix) ? plan.domain_suffix : [];
+            const operations = Array.isArray(plan.operations) ? plan.operations : [];
+            const dnsRedirect = plan.dns_redirect || {};
+            const fakeIpRoute = plan.fakeip_route || {};
+            const policyOutbound = plan.policy_outbound || {};
             const requirements = [];
 
             if (plan.requires_opnsense_dns_redirect === true) {
@@ -42,12 +50,28 @@
                 requirements.push('Дополнительные policy-компоненты не требуются');
             }
 
+            const dnsRedirectText = dnsRedirect.required === true
+                ? captureModeLabel(dnsRedirect.scope) + ': DNS/53 → ' +
+                    (dnsRedirect.target_address || 'не задано') + ':' + (dnsRedirect.target_port || 'не задано')
+                : 'Не требуется';
+            const fakeIpRouteText = fakeIpRoute.required === true
+                ? (fakeIpRoute.network || 'не задано') + ' → ' + (fakeIpRoute.interface || 'не задано')
+                : 'Не требуется';
+            const outboundText = policyOutbound.required === true
+                ? (policyOutbound.ready === true ? 'Готов' : 'Требует настройки')
+                : 'Не требуется';
+
             $('#policyManagementState').text(managementStateLabel(data.management_state));
-            $('#policyCaptureMode').text(plan.capture_mode === 'all_lan' ? 'Весь локальный трафик' : 'Только выбранные клиенты');
+            $('#policyCaptureMode').text(captureModeLabel(plan.capture_mode));
             $('#policyClientCount').text(clients.length + ' исходных, ' + compiledClients.length + ' CIDR-селекторов');
             $('#policyDomainCount').text(domains.length + ' точных, ' + suffixes.length + ' wildcard');
             $('#policyFakeIp').text(plan.fakeip_ipv4_range || 'не используется');
             $('#policyDnsTypes').text(Array.isArray(plan.dns_query_types) ? plan.dns_query_types.join(', ') : 'не используются');
+            $('#policyDnsRedirect').text(dnsRedirectText);
+            $('#policyFakeIpRoute').text(fakeIpRouteText);
+            $('#policyOutbound').text(outboundText);
+            $('#policyOperationCount').text(String(operations.length));
+            $('#policyPlanState').text(plan.ready === true ? 'Готов' : (plan.required === true ? 'Требует завершения настройки' : 'Дополнительные правила не требуются'));
 
             const list = $('#policyRequirements').empty();
             requirements.forEach(function(item) {
@@ -161,12 +185,17 @@
         </div>
         <div style="padding: 14px;">
             <dl class="dl-horizontal" style="margin-bottom: 10px;">
-                <dt>Состояние</dt><dd id="policyManagementState"></dd>
+                <dt>Состояние конфигурации</dt><dd id="policyManagementState"></dd>
+                <dt>Состояние policy-плана</dt><dd id="policyPlanState"></dd>
                 <dt>Клиенты</dt><dd id="policyCaptureMode"></dd>
                 <dt>Селекторы клиентов</dt><dd id="policyClientCount"></dd>
                 <dt>Домены</dt><dd id="policyDomainCount"></dd>
                 <dt>FakeIP IPv4</dt><dd id="policyFakeIp"></dd>
                 <dt>DNS-типы</dt><dd id="policyDnsTypes"></dd>
+                <dt>DNS redirect</dt><dd id="policyDnsRedirect"></dd>
+                <dt>Маршрут FakeIP</dt><dd id="policyFakeIpRoute"></dd>
+                <dt>Policy outbound</dt><dd id="policyOutbound"></dd>
+                <dt>Операций OPNsense</dt><dd id="policyOperationCount"></dd>
             </dl>
             <strong>Необходимые компоненты:</strong>
             <ul id="policyRequirements" style="margin-top: 6px; margin-bottom: 0;"></ul>
