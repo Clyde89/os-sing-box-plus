@@ -16,8 +16,13 @@ logdir="/var/log/sing-box"
 logfile="${logdir}/sing-box.log"
 command="/usr/local/bin/sing-box"
 config="/usr/local/etc/sing-box/config.json"
-pending_filter_reload="/var/db/os-sing-box/filter-reload.pending"
-setup_required="/var/db/os-sing-box/setup-required"
+state_dir="/var/db/os-sing-box"
+pending_filter_reload="${state_dir}/filter-reload.pending"
+setup_required="${state_dir}/setup-required"
+managed_policy="${state_dir}/managed-policy"
+policy_plan="${state_dir}/policy-plan.json"
+tun_interface_file="${state_dir}/tun-interface"
+policy_active="/var/run/sing-box-policy-active"
 
 # shellcheck disable=SC2034
 start_cmd="${name}_start"
@@ -28,6 +33,18 @@ status_cmd="${name}_status"
 
 load_rc_config $name
 : "${sing_box_enable:=no}"
+
+configured_tun_interface() {
+    candidate="tun_singbox"
+    if [ -r "$tun_interface_file" ]; then
+        stored="$(cat "$tun_interface_file" 2>/dev/null || true)"
+        case "$stored" in
+            ''|*[!A-Za-z0-9_.-]*) ;;
+            *) candidate="$stored" ;;
+        esac
+    fi
+    printf '%s\n' "$candidate"
+}
 
 read_pid() {
     [ -f "$pidfile" ] || return 1
@@ -81,8 +98,68 @@ remove_stale_pidfile() {
     rm -f "$pidfile"
 }
 
+reload_firewall() {
+    if ! command -v configctl >/dev/null 2>&1; then
+        echo "Не удалось применить правила firewall: configctl недоступен."
+        return 1
+    fi
+    configctl filter reload >/dev/null 2>&1
+}
+
+activate_policy_rules() {
+    if [ -f "$managed_policy" ] && [ -r "$policy_plan" ]; then
+        : > "$policy_active" || return 1
+        chmod 0600 "$policy_active" || {
+            rm -f "$policy_active"
+            return 1
+        }
+
+        echo "Активируются управляемые правила DNS redirect и policy routing..."
+        if ! reload_firewall; then
+            rm -f "$policy_active"
+            reload_firewall >/dev/null 2>&1 || true
+            echo "Не удалось активировать управляемые правила firewall."
+            return 1
+        fi
+
+        rm -f "$pending_filter_reload"
+        echo "Управляемые правила firewall активированы."
+        return 0
+    fi
+
+    rm -f "$policy_active"
+    if [ -f "$pending_filter_reload" ]; then
+        echo "Применяются отложенные изменения firewall..."
+        if ! reload_firewall; then
+            echo "Не удалось применить отложенные изменения firewall."
+            return 1
+        fi
+        rm -f "$pending_filter_reload"
+        echo "Отложенные изменения firewall применены."
+    fi
+    return 0
+}
+
+deactivate_policy_rules() {
+    [ -f "$policy_active" ] || return 0
+
+    rm -f "$policy_active"
+    echo "Отключаются управляемые правила DNS redirect и policy routing..."
+    if ! reload_firewall; then
+        : > "$policy_active" 2>/dev/null || true
+        chmod 0600 "$policy_active" 2>/dev/null || true
+        echo "Не удалось безопасно отключить управляемые правила firewall."
+        return 1
+    fi
+
+    echo "Управляемые правила firewall отключены."
+    return 0
+}
+
 cleanup_failed_start() {
     pid="$1"
+
+    deactivate_policy_rules >/dev/null 2>&1 || true
 
     if process_is_sing_box "$pid"; then
         kill "$pid" 2>/dev/null || true
@@ -93,26 +170,6 @@ cleanup_failed_start() {
     fi
 
     remove_stale_pidfile
-}
-
-apply_pending_filter_reload() {
-    [ -f "$pending_filter_reload" ] || return 0
-
-    if ! command -v configctl >/dev/null 2>&1; then
-        echo "Не удалось применить отложенные правила firewall: configctl недоступен."
-        return 1
-    fi
-
-    echo "Применяются отложенные правила firewall после legacy-миграции..."
-    if ! configctl filter reload >/dev/null 2>&1; then
-        echo "Не удалось применить отложенные правила firewall."
-        return 1
-    fi
-
-    rm -f "$pending_filter_reload"
-    rmdir "$(dirname "$pending_filter_reload")" 2>/dev/null || true
-    echo "Отложенные правила firewall применены."
-    return 0
 }
 
 sing_box_start() {
@@ -128,15 +185,17 @@ sing_box_start() {
         return 1
     fi
 
+    tun_interface="$(configured_tun_interface)"
+
     if [ -f "$pidfile" ]; then
         existing_pid="$(read_pid || true)"
         if [ -n "$existing_pid" ] && process_is_sing_box "$existing_pid"; then
-            if ! ifconfig tun_singbox >/dev/null 2>&1; then
-                echo "Процесс sing-box уже запущен, но интерфейс tun_singbox отсутствует."
+            if ! ifconfig "$tun_interface" >/dev/null 2>&1; then
+                echo "Процесс sing-box уже запущен, но интерфейс $tun_interface отсутствует."
                 return 1
             fi
-            if ! apply_pending_filter_reload; then
-                echo "Служба sing-box запущена, но отложенные правила firewall не применены."
+            if ! activate_policy_rules; then
+                echo "Служба sing-box запущена, но управляемые правила firewall не активированы."
                 return 1
             fi
             echo "Служба sing-box уже запущена, PID $existing_pid."
@@ -180,11 +239,11 @@ sing_box_start() {
 
     timeout=20
     while [ "$timeout" -gt 0 ]; do
-        if ifconfig tun_singbox >/dev/null 2>&1; then
+        if ifconfig "$tun_interface" >/dev/null 2>&1; then
             break
         fi
         if ! process_is_sing_box "$started_pid"; then
-            echo "Процесс sing-box завершился до создания tun_singbox."
+            echo "Процесс sing-box завершился до создания $tun_interface."
             cleanup_failed_start "$started_pid"
             return 1
         fi
@@ -192,14 +251,14 @@ sing_box_start() {
         timeout=$((timeout - 1))
     done
 
-    if ! ifconfig tun_singbox >/dev/null 2>&1; then
-        echo "Интерфейс tun_singbox не был создан за 20 секунд; запуск отменён."
+    if ! ifconfig "$tun_interface" >/dev/null 2>&1; then
+        echo "Интерфейс $tun_interface не был создан за 20 секунд; запуск отменён."
         cleanup_failed_start "$started_pid"
         return 1
     fi
 
-    if ! apply_pending_filter_reload; then
-        echo "Запуск sing-box отменён: отложенные правила firewall не применены."
+    if ! activate_policy_rules; then
+        echo "Запуск sing-box отменён: управляемые правила firewall не активированы."
         cleanup_failed_start "$started_pid"
         return 1
     fi
@@ -209,6 +268,11 @@ sing_box_start() {
 
 sing_box_stop() {
     echo "Остановка sing-box..."
+
+    if ! deactivate_policy_rules; then
+        echo "Остановка sing-box отменена: правила firewall не удалось безопасно отключить."
+        return 1
+    fi
 
     if [ ! -f "$pidfile" ]; then
         echo "Служба sing-box не запущена: PID-файл отсутствует."
@@ -258,8 +322,9 @@ sing_box_status() {
     fi
 
     if process_is_sing_box "$pid"; then
-        if ! ifconfig tun_singbox >/dev/null 2>&1; then
-            echo "Процесс sing-box работает, но интерфейс tun_singbox отсутствует."
+        tun_interface="$(configured_tun_interface)"
+        if ! ifconfig "$tun_interface" >/dev/null 2>&1; then
+            echo "Процесс sing-box работает, но интерфейс $tun_interface отсутствует."
             return 1
         fi
         echo "Служба sing-box работает, PID $pid."
