@@ -1,7 +1,7 @@
 <model>
     <mount>//OPNsense/SingBox/settings</mount>
     <description>Структурированные настройки sing-box</description>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <items>
         <capture>
             <mode type="OptionField">
@@ -26,6 +26,10 @@
                 <Required>Y</Required>
             </listenPort>
             <redirectDomains type=".\DomainListField"/>
+            <fakeIpRange type=".\FakeIpRangeField">
+                <Default>198.18.0.0/15</Default>
+                <Required>Y</Required>
+            </fakeIpRange>
         </dns>
         <tun>
             <interfaceName type="TextField">
