@@ -17,6 +17,46 @@ final class SelectionValidator
         return self::validateList($value, [self::class, 'validateClient']);
     }
 
+    public static function validateIpv4Network(string $value): array
+    {
+        $value = trim($value);
+        if ($value === '' || substr_count($value, '/') !== 1) {
+            return ['Укажите IPv4-сеть в формате CIDR.'];
+        }
+
+        [$address, $prefixValue] = array_map('trim', explode('/', $value, 2));
+        if (
+            filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false ||
+            $prefixValue === '' ||
+            !ctype_digit($prefixValue)
+        ) {
+            return ['Укажите корректную IPv4-сеть в формате CIDR.'];
+        }
+
+        $prefix = (int)$prefixValue;
+        if ($prefix < 0 || $prefix > 32) {
+            return ['Длина префикса IPv4 должна находиться в диапазоне от 0 до 32.'];
+        }
+
+        $packed = @inet_pton($address);
+        if ($packed === false) {
+            return ['Не удалось проверить IPv4-сеть.'];
+        }
+
+        $network = self::maskIpv4($packed, $prefix);
+        if ($network !== $packed) {
+            $networkAddress = @inet_ntop($network);
+            return [
+                sprintf(
+                    'Укажите адрес сети без host-битов%s.',
+                    $networkAddress !== false ? '; ожидается ' . $networkAddress . '/' . $prefix : ''
+                ),
+            ];
+        }
+
+        return [];
+    }
+
     private static function validateList(string $value, callable $validator): array
     {
         if (strlen($value) > self::MAX_INPUT_BYTES) {
@@ -143,5 +183,29 @@ final class SelectionValidator
         }
 
         return null;
+    }
+
+    private static function maskIpv4(string $packed, int $prefix): string
+    {
+        $bytes = array_values(unpack('C*', $packed));
+        $remaining = $prefix;
+
+        foreach ($bytes as $index => $byte) {
+            if ($remaining >= 8) {
+                $remaining -= 8;
+                continue;
+            }
+
+            if ($remaining <= 0) {
+                $bytes[$index] = 0;
+                continue;
+            }
+
+            $mask = (0xFF << (8 - $remaining)) & 0xFF;
+            $bytes[$index] = $byte & $mask;
+            $remaining = 0;
+        }
+
+        return pack('C*', ...$bytes);
     }
 }
