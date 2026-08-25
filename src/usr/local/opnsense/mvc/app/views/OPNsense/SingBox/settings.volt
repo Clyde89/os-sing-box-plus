@@ -10,11 +10,59 @@
                 .text(text);
         }
 
+        function managementStateLabel(state) {
+            const labels = {
+                initial_setup: 'Первоначальная настройка',
+                managed: 'Управляется структурированными настройками',
+                empty: 'Рабочая конфигурация ещё не создана',
+                unmanaged_existing: 'Обнаружена существующая пользовательская конфигурация'
+            };
+            return labels[state] || 'Состояние не определено';
+        }
+
+        function renderPolicySummary(data) {
+            const plan = data && data.policy_plan ? data.policy_plan : {};
+            const selectors = data && data.selectors ? data.selectors : {};
+            const clients = Array.isArray(selectors.clients) ? selectors.clients : [];
+            const compiledClients = Array.isArray(plan.source_ip_cidr) ? plan.source_ip_cidr : [];
+            const domains = Array.isArray(plan.domain) ? plan.domain : [];
+            const suffixes = Array.isArray(plan.domain_suffix) ? plan.domain_suffix : [];
+            const requirements = [];
+
+            if (plan.requires_opnsense_dns_redirect === true) {
+                requirements.push('Перенаправление DNS-запросов на локальный listener');
+            }
+            if (plan.requires_opnsense_fakeip_route === true) {
+                requirements.push('Маршрут FakeIP-трафика через TUN');
+            }
+            if (plan.requires_policy_outbound === true) {
+                requirements.push('Policy outbound для выбранного трафика');
+            }
+            if (requirements.length === 0) {
+                requirements.push('Дополнительные policy-компоненты не требуются');
+            }
+
+            $('#policyManagementState').text(managementStateLabel(data.management_state));
+            $('#policyCaptureMode').text(plan.capture_mode === 'all_lan' ? 'Весь локальный трафик' : 'Только выбранные клиенты');
+            $('#policyClientCount').text(clients.length + ' исходных, ' + compiledClients.length + ' CIDR-селекторов');
+            $('#policyDomainCount').text(domains.length + ' точных, ' + suffixes.length + ' wildcard');
+            $('#policyFakeIp').text(plan.fakeip_ipv4_range || 'не используется');
+            $('#policyDnsTypes').text(Array.isArray(plan.dns_query_types) ? plan.dns_query_types.join(', ') : 'не используются');
+
+            const list = $('#policyRequirements').empty();
+            requirements.forEach(function(item) {
+                $('<li>').text(item).appendTo(list);
+            });
+
+            $('#policySummary').removeClass('hidden');
+        }
+
         function renderPreview(data) {
             if (!data || data.result !== 'ok') {
                 $('#runtimePreview').text('');
                 $('#runtimeSha').text('');
                 $('#runtimeWarnings').addClass('hidden').text('');
+                $('#policySummary').addClass('hidden');
                 $('#applyAct').prop('disabled', true);
                 showMessage('danger', data && data.message ? data.message : 'Не удалось сформировать предварительную конфигурацию.');
                 return;
@@ -22,6 +70,7 @@
 
             $('#runtimePreview').text(data.config || '');
             $('#runtimeSha').text(data.sha256 ? 'SHA-256: ' + data.sha256 : '');
+            renderPolicySummary(data);
 
             if (Array.isArray(data.warnings) && data.warnings.length > 0) {
                 $('#runtimeWarnings').removeClass('hidden').text(data.warnings.join('\n'));
@@ -35,7 +84,7 @@
                 ready ? 'success' : 'warning',
                 ready
                     ? 'Предварительная runtime-конфигурация сформирована и готова к применению.'
-                    : 'Настройки сохранены, но runtime-конфигурация пока не готова к применению. Проверьте предупреждения.'
+                    : 'Настройки сохранены, но runtime-конфигурация пока не готова к применению. Проверьте сводку и предупреждения.'
             );
         }
 
@@ -78,7 +127,7 @@
 
 <div class="alert alert-info" role="alert">
     <strong>Структурированные настройки sing-box.</strong>
-    Сохранение параметров не изменяет рабочий <code>config.json</code>. Перед применением можно просмотреть сгенерированную runtime-конфигурацию и предупреждения.
+    Сохранение параметров не изменяет рабочий <code>config.json</code>. Перед применением можно проверить сводку, предупреждения и технический preview.
 </div>
 
 <div id="singboxMessage" class="alert alert-info hidden" role="alert"></div>
@@ -105,13 +154,32 @@
 
 <div class="col-md-12">
     <div id="runtimeWarnings" class="alert alert-warning hidden" style="white-space: pre-wrap;"></div>
-    <div class="content-box">
+
+    <div id="policySummary" class="content-box hidden">
         <div style="padding: 12px 14px; border-bottom: 1px solid #eeeeee; font-weight: 600;">
-            Предварительная runtime-конфигурация
+            Что будет настроено
         </div>
         <div style="padding: 14px;">
-            <div id="runtimeSha" class="text-muted" style="margin-bottom: 8px;"></div>
-            <pre id="runtimePreview" style="max-height: 480px; overflow: auto; white-space: pre; word-break: normal;"></pre>
+            <dl class="dl-horizontal" style="margin-bottom: 10px;">
+                <dt>Состояние</dt><dd id="policyManagementState"></dd>
+                <dt>Клиенты</dt><dd id="policyCaptureMode"></dd>
+                <dt>Селекторы клиентов</dt><dd id="policyClientCount"></dd>
+                <dt>Домены</dt><dd id="policyDomainCount"></dd>
+                <dt>FakeIP IPv4</dt><dd id="policyFakeIp"></dd>
+                <dt>DNS-типы</dt><dd id="policyDnsTypes"></dd>
+            </dl>
+            <strong>Необходимые компоненты:</strong>
+            <ul id="policyRequirements" style="margin-top: 6px; margin-bottom: 0;"></ul>
+        </div>
+    </div>
+
+    <div class="content-box">
+        <div style="padding: 12px 14px;">
+            <details>
+                <summary style="cursor: pointer; font-weight: 600;">Технический JSON runtime-конфигурации</summary>
+                <div id="runtimeSha" class="text-muted" style="margin: 10px 0 8px;"></div>
+                <pre id="runtimePreview" style="max-height: 480px; overflow: auto; white-space: pre; word-break: normal;"></pre>
+            </details>
         </div>
     </div>
 </div>
