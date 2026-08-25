@@ -6,7 +6,7 @@ require_once __DIR__ . '/PolicyPlanValidator.php';
 
 final class PolicyPlanBuilder
 {
-    private const SCHEMA_VERSION = 1;
+    private const SCHEMA_VERSION = 2;
     private const MANAGED_BY = 'os-sing-box-plus';
 
     public static function build(
@@ -20,7 +20,8 @@ final class PolicyPlanBuilder
         string $tunInterface,
         string $tunAddress,
         string $policyOutboundMode = 'direct_bind',
-        string $policyBindAddress = ''
+        string $policyBindAddress = '',
+        string $policyGateway = ''
     ): array {
         if (!in_array($captureMode, ['selected', 'all_lan'], true)) {
             throw new \InvalidArgumentException('Неподдерживаемый режим захвата policy-плана.');
@@ -52,15 +53,18 @@ final class PolicyPlanBuilder
             'ready' => !$policyRequired || ($fakeIpRange !== '' && $tunInterface !== ''),
             'network' => $fakeIpRange,
             'interface' => $tunInterface,
+            'mode' => $policyRequired ? 'sing_box_auto_route' : 'not_required',
         ];
 
-        $policyOutboundReady = !$policyRequired || $policyBindAddress !== '';
+        $policyOutboundReady = !$policyRequired || ($policyBindAddress !== '' && $policyGateway !== '');
         $policyOutbound = [
             'required' => $policyRequired,
             'ready' => $policyOutboundReady,
             'mode' => $policyRequired ? $policyOutboundMode : 'not_required',
             'tag' => $policyRequired ? 'policy-out' : null,
             'bind_address' => $policyRequired ? $policyBindAddress : null,
+            'gateway' => $policyRequired ? $policyGateway : null,
+            'fail_closed' => $policyRequired,
         ];
 
         $operations = [];
@@ -82,12 +86,17 @@ final class PolicyPlanBuilder
             }
         }
 
-        if ($policyRequired && $fakeIpRoute['ready']) {
+        if ($policyRequired && $policyOutbound['ready']) {
             $operations[] = [
-                'id' => 'fakeip-route-ipv4',
-                'type' => 'route',
-                'network' => $fakeIpRange,
-                'interface' => $tunInterface,
+                'id' => 'policy-outbound-route',
+                'type' => 'policy_route',
+                'source_address' => $policyBindAddress,
+                'gateway' => $policyGateway,
+            ];
+            $operations[] = [
+                'id' => 'policy-outbound-block',
+                'type' => 'policy_block',
+                'source_address' => $policyBindAddress,
             ];
         }
 
@@ -114,7 +123,9 @@ final class PolicyPlanBuilder
             'fakeip_ipv4_range' => $fakeIpRange,
             'dns_query_types' => ['A'],
             'requires_opnsense_dns_redirect' => $policyRequired,
-            'requires_opnsense_fakeip_route' => $policyRequired,
+            'requires_opnsense_fakeip_route' => false,
+            'requires_singbox_fakeip_route' => $policyRequired,
+            'requires_opnsense_policy_route' => $policyRequired,
             'requires_policy_outbound' => $policyRequired,
             'operations' => $operations,
         ];
