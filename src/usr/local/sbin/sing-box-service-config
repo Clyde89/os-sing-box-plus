@@ -14,7 +14,9 @@ usage()
 write_state()
 {
     value="$1"
-    install -d -o root -g wheel -m 0755 "$RC_CONF_DIR"
+    if [ ! -d "$RC_CONF_DIR" ]; then
+        install -d -o root -g wheel -m 0755 "$RC_CONF_DIR"
+    fi
     temporary="$(mktemp "${RC_CONF_FILE}.XXXXXX")"
     trap 'rm -f "$temporary"' EXIT HUP INT TERM
     printf 'sing_box_enable="%s"\n' "$value" > "$temporary"
