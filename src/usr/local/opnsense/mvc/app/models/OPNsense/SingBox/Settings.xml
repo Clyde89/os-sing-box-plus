@@ -1,7 +1,7 @@
 <model>
     <mount>//OPNsense/SingBox/settings</mount>
     <description>Структурированные настройки sing-box</description>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <items>
         <capture>
             <mode type="OptionField">
@@ -37,6 +37,20 @@
                 <Required>Y</Required>
             </fakeIpRange>
         </dns>
+        <policy>
+            <outboundMode type="OptionField">
+                <Default>direct_bind</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <direct_bind>Прямой выход с привязкой IPv4</direct_bind>
+                </OptionValues>
+            </outboundMode>
+            <bindAddress type="NetworkField">
+                <Required>N</Required>
+                <NetMaskAllowed>N</NetMaskAllowed>
+                <WildcardEnabled>N</WildcardEnabled>
+            </bindAddress>
+        </policy>
         <tun>
             <interfaceName type="TextField">
                 <Default>tun_singbox</Default>
