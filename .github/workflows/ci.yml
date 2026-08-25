@@ -31,6 +31,7 @@ jobs:
           test -f tests/service-lifecycle-static.sh
           test -f tests/service-policy-lifecycle.sh
           test -f tests/package-install-static.sh
+          test -f tests/package-lifecycle.sh
           test -f tests/webui-safety-static.sh
           test -f tests/service-config.sh
           test -f tests/log-control.sh
@@ -199,6 +200,12 @@ jobs:
         run: |
           set -euo pipefail
           sh tests/package-install-static.sh
+
+      - name: Проверка установки и legacy-обновления пакета
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/package-lifecycle.sh
 
       - name: Проверка безопасности первоначальной настройки WebUI
         shell: bash
