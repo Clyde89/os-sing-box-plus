@@ -21,6 +21,10 @@ grep -q 'Сохранён ранее созданный исходный сни�
 grep -q 'RC_STATE_FILE=.*sing_box.rc.upgrade' "$POST_INSTALL"
 grep -q 'install -o root -g wheel -m 0644 "$RC_STATE_FILE" "$RC_CONF_FILE"' "$POST_INSTALL"
 grep -q "echo 'sing_box_enable=\"NO\"' > \"\$RC_CONF_FILE\"" "$POST_INSTALL"
+grep -q 'SETUP_REQUIRED_FILE=.*setup-required' "$POST_INSTALL"
+grep -q 'fresh_configuration=0' "$POST_INSTALL"
+grep -q ': > "$SETUP_REQUIRED_FILE"' "$POST_INSTALL"
+grep -q 'Первоначальная настройка sing-box отмечена как незавершённая' "$POST_INSTALL"
 
 if grep -q "echo 'sing_box_enable=\"YES\"' > \"\$RC_CONF_FILE\"" "$POST_INSTALL"; then
     echo "Первая установка не должна автоматически включать sing-box" >&2
