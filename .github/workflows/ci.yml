@@ -38,6 +38,7 @@ jobs:
           test -f tests/policy-plan-validator.php
           test -f tests/policy-plan-builder.php
           test -f tests/firewall-rule-builder.php
+          test -f tests/firewall-registration.php
           test -f tests/firewall-anchor-static.sh
           test -f tests/runtime-config-builder.php
           test -f tests/runtime-config-apply-static.sh
@@ -270,6 +271,12 @@ jobs:
         run: |
           set -euo pipefail
           php tests/firewall-rule-builder.php
+
+      - name: Проверка fail-closed при недоступном gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/firewall-registration.php
 
       - name: Проверка предварительного рендера runtime-конфигурации
         shell: bash

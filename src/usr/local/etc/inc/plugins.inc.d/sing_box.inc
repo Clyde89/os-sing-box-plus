@@ -82,24 +82,8 @@ function sing_box_gateway_available($fw, $gateway)
     return is_array($mapping) && !empty($mapping['logic']);
 }
 
-function sing_box_firewall($fw)
+function sing_box_register_policy_rules($fw, $rules)
 {
-    if (!sing_box_policy_is_active()) {
-        return;
-    }
-
-    $plan = sing_box_load_policy_plan();
-    if ($plan === null) {
-        return;
-    }
-
-    try {
-        $rules = \OPNsense\SingBox\Runtime\FirewallRuleBuilder::build($plan);
-    } catch (\Throwable $error) {
-        syslog(LOG_ERR, 'sing-box: не удалось сформировать правила firewall из policy-плана');
-        return;
-    }
-
     foreach ($rules['destination_nat'] ?? [] as $rule) {
         $priority = (int)($rule['#priority'] ?? 2);
         unset($rule['#priority'], $rule['#operation']);
@@ -123,6 +107,27 @@ function sing_box_firewall($fw)
 
         $fw->registerFilterRule($priority, $rule);
     }
+}
+
+function sing_box_firewall($fw)
+{
+    if (!sing_box_policy_is_active()) {
+        return;
+    }
+
+    $plan = sing_box_load_policy_plan();
+    if ($plan === null) {
+        return;
+    }
+
+    try {
+        $rules = \OPNsense\SingBox\Runtime\FirewallRuleBuilder::build($plan);
+    } catch (\Throwable $error) {
+        syslog(LOG_ERR, 'sing-box: не удалось сформировать правила firewall из policy-плана');
+        return;
+    }
+
+    sing_box_register_policy_rules($fw, $rules);
 }
 
 function sing_box_services()
