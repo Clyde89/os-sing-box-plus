@@ -53,6 +53,8 @@ need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Menu/Menu.xml"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/ACL/ACL.xml"
 need_file "src/usr/local/www/sing-box.php"
 need_file "src/usr/local/www/sing-box_log.php"
+need_file "src/usr/local/share/licenses/os-sing-box/LICENSE.plugin"
+need_file "src/usr/local/share/licenses/os-sing-box/LICENSE.sing-box"
 need_file "packaging/freebsd/+PRE_INSTALL"
 need_file "packaging/freebsd/+POST_INSTALL"
 need_file "packaging/freebsd/+PRE_DEINSTALL"
@@ -171,6 +173,8 @@ chmod 0644 "$STAGEDIR/usr/local/etc/sing-box/readiness.conf.sample"
 chmod 0755 "$STAGEDIR/usr/local/etc/rc.d/sing-box"
 chmod 0755 "$STAGEDIR/usr/local/etc/rc.syshook.d/start/70-sing-box-readiness"
 chmod 0755 "$STAGEDIR/usr/local/sbin/sing-box-readiness"
+chmod 0644 "$STAGEDIR/usr/local/share/licenses/os-sing-box/LICENSE.plugin"
+chmod 0644 "$STAGEDIR/usr/local/share/licenses/os-sing-box/LICENSE.sing-box"
 
 echo "==> Формируется список файлов"
 find "$STAGEDIR" -type f | sed "s#^$STAGEDIR##" | sort > "$PLIST"
@@ -193,8 +197,8 @@ echo "==> Формируются метаданные"
     printf 'arch: "%s"\n' "$PKG_ARCH"
     printf 'prefix: "%s"\n' "$PREFIX"
     printf 'categories: [ "net" ]\n'
-    printf 'licenselogic: "single"\n'
-    printf 'licenses: [ "MIT" ]\n'
+    printf 'licenselogic: "multi"\n'
+    printf 'licenses: [ "MIT", "BSD2CLAUSE", "GPLv3+" ]\n'
     printf 'flatsize: %s\n' "$FLATSIZE"
     printf 'desc: <<EOD\n'
     cat "$SCRIPT_DIR/packaging/freebsd/pkg-descr"
