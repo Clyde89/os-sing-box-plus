@@ -1,6 +1,6 @@
 <model>
     <mount>//OPNsense/SingBox/settings</mount>
-    <description>Основные настройки sing-box</description>
+    <description>Структурированные настройки sing-box</description>
     <version>1.0.0</version>
     <items>
         <capture>
