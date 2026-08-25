@@ -12,6 +12,7 @@ ABI="${ABI:-universal}"
 OUTPUT_NAME="${OUTPUT_NAME:-${PKG_NAME}.pkg}"
 SING_BOX_RELEASE="${SING_BOX_RELEASE:-v1.13.13-vincent}"
 SING_BOX_ASSET="${SING_BOX_ASSET:-bsd-box-reF1nd-freebsd-amd64.xz}"
+SING_BOX_ASSET_SHA256="${SING_BOX_ASSET_SHA256:-3ba254d792964cd1005946354e0c8250a05955381bdcbd19f57265a339b199d7}"
 SING_BOX_SHA256="${SING_BOX_SHA256:-1da7e84757a5ff5d13d4154b4e4055ea5f99d069c2423687fe8165bf504be7d0}"
 SING_BOX_DOWNLOAD_URL="${SING_BOX_DOWNLOAD_URL:-https://github.com/Vincent-Loeng/bsd-box/releases/download/$SING_BOX_RELEASE/$SING_BOX_ASSET}"
 DOWNLOAD_TIMEOUT="${DOWNLOAD_TIMEOUT:-300}"
@@ -104,6 +105,17 @@ download_file() {
     fi
 }
 
+verify_sha256() {
+    file="$1"
+    expected="$2"
+    label="$3"
+    actual="$(sha256 -q "$file")"
+
+    if [ "$actual" != "$expected" ]; then
+        die "контрольная сумма $label не совпала: ожидалась $expected, получена $actual"
+    fi
+}
+
 unpack_binary() {
     archive="$1"
     binary_dst="$2"
@@ -121,36 +133,31 @@ unpack_binary() {
     [ -s "$binary_dst" ] || die "получен пустой бинарный файл: $archive"
 }
 
-verify_binary() {
-    binary="$1"
-    expected="$2"
-    actual="$(sha256 -q "$binary")"
-
-    if [ "$actual" != "$expected" ]; then
-        die "контрольная сумма sing-box не совпала: ожидалась $expected, получена $actual"
-    fi
-}
-
 prepare_binary() {
     asset="$1"
     binary_url="$2"
     binary_dst="$3"
     local_asset="$SCRIPT_DIR/src/usr/local/bin/$asset"
     archive="$binary_dst.download"
+    source_archive=""
 
     mkdir -p "$DOWNLOADDIR"
     if [ -f "$local_asset" ]; then
-        echo "==> Используется локальный бинарный файл $local_asset"
-        unpack_binary "$local_asset" "$binary_dst"
+        echo "==> Используется локальный release-артефакт $local_asset"
+        source_archive="$local_asset"
     else
         echo "==> Загружается $binary_url"
         rm -f "$archive"
         download_file "$binary_url" "$archive"
-        unpack_binary "$archive" "$binary_dst"
+        source_archive="$archive"
     fi
 
-    verify_binary "$binary_dst" "$SING_BOX_SHA256"
-    echo "==> Проверена контрольная сумма sing-box $SING_BOX_RELEASE"
+    verify_sha256 "$source_archive" "$SING_BOX_ASSET_SHA256" "release-артефакта sing-box $SING_BOX_RELEASE"
+    echo "==> Проверена контрольная сумма release-артефакта sing-box $SING_BOX_RELEASE"
+
+    unpack_binary "$source_archive" "$binary_dst"
+    verify_sha256 "$binary_dst" "$SING_BOX_SHA256" "бинарного файла sing-box $SING_BOX_RELEASE"
+    echo "==> Проверена контрольная сумма бинарного файла sing-box $SING_BOX_RELEASE"
 }
 
 echo "==> Подготавливаются файлы пакета"
