@@ -32,6 +32,7 @@ jobs:
           test -f tests/package-install-static.sh
           test -f tests/webui-safety-static.sh
           test -f tests/service-config.sh
+          test -f tests/log-control.sh
           test -f tests/stubs/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
@@ -39,6 +40,7 @@ jobs:
           test -f src/usr/local/etc/rc.syshook.d/start/70-sing-box-readiness
           test -x src/usr/local/sbin/sing-box-readiness
           test -x src/usr/local/sbin/sing-box-service-config
+          test -x src/usr/local/sbin/sing-box-logctl
           test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
           test -f src/usr/local/share/licenses/os-sing-box/LICENSE.plugin
           test -f src/usr/local/share/licenses/os-sing-box/LICENSE.opnsense
@@ -113,7 +115,7 @@ jobs:
           while IFS= read -r -d '' file; do
             sh -n "$file"
             echo "OK $file"
-          done < <(find src packaging tests -type f \( -name '*.sh' -o -path '*/rc.d/*' -o -path '*/rc.syshook.d/*' -o -path '*/sbin/sing-box-readiness' -o -path '*/sbin/sing-box-service-config' -o -name '+PRE_INSTALL' -o -name '+POST_INSTALL' -o -name '+PRE_DEINSTALL' -o -name '+POST_DEINSTALL' \) -print0)
+          done < <(find src packaging tests -type f \( -name '*.sh' -o -path '*/rc.d/*' -o -path '*/rc.syshook.d/*' -o -path '*/sbin/sing-box-readiness' -o -path '*/sbin/sing-box-service-config' -o -path '*/sbin/sing-box-logctl' -o -name '+PRE_INSTALL' -o -name '+POST_INSTALL' -o -name '+PRE_DEINSTALL' -o -name '+POST_DEINSTALL' \) -print0)
 
       - name: Проверка защит жизненного цикла службы
         shell: bash
@@ -138,6 +140,12 @@ jobs:
         run: |
           set -euo pipefail
           sh tests/service-config.sh
+
+      - name: Проверка безопасного управления журналом sing-box
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/log-control.sh
 
       - name: Проверка безопасного отключения восстановления
         shell: bash
