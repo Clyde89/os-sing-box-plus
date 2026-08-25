@@ -57,6 +57,20 @@ final class SelectionValidator
         return $messages;
     }
 
+    public static function validateIpv4Address(string $value, bool $allowEmpty = false): array
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return $allowEmpty ? [] : ['Укажите IPv4-адрес.'];
+        }
+
+        if (filter_var($value, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            return ['Укажите корректный IPv4-адрес без префикса сети.'];
+        }
+
+        return [];
+    }
+
     public static function validateIpv4Network(string $value): array
     {
         $value = trim($value);
