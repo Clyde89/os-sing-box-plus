@@ -193,9 +193,6 @@ echo "==> Формируются метаданные"
     printf 'arch: "%s"\n' "$PKG_ARCH"
     printf 'prefix: "%s"\n' "$PREFIX"
     printf 'flatsize: %s\n' "$FLATSIZE"
-    printf 'deps: {\n'
-    printf '    curl: { origin: "ftp/curl", version: ">=0" }\n'
-    printf '}\n'
     printf 'desc: <<EOD\n'
     cat "$SCRIPT_DIR/packaging/freebsd/pkg-descr"
     printf '\nEOD\n'
