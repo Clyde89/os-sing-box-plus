@@ -125,6 +125,14 @@ sing_box_start() {
     if [ -f "$pidfile" ]; then
         existing_pid="$(read_pid || true)"
         if [ -n "$existing_pid" ] && process_is_sing_box "$existing_pid"; then
+            if ! ifconfig tun_singbox >/dev/null 2>&1; then
+                echo "Процесс sing-box уже запущен, но интерфейс tun_singbox отсутствует."
+                return 1
+            fi
+            if ! apply_pending_filter_reload; then
+                echo "Служба sing-box запущена, но отложенные правила firewall не применены."
+                return 1
+            fi
             echo "Служба sing-box уже запущена, PID $existing_pid."
             return 0
         fi
