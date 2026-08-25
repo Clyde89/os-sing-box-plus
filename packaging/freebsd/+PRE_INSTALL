@@ -2,9 +2,11 @@
 set -eu
 
 CONFIG_FILE="/usr/local/etc/sing-box/config.json"
+RC_CONF_FILE="/etc/rc.conf.d/sing_box"
 SYSTEM_CONFIG="/conf/config.xml"
 MIGRATION_DIR="/var/db/os-sing-box"
 MIGRATION_FILE="${MIGRATION_DIR}/config.json.upgrade"
+RC_STATE_FILE="${MIGRATION_DIR}/sing_box.rc.upgrade"
 LEGACY_CONFIG_SNAPSHOT="${MIGRATION_DIR}/config.xml.legacy"
 LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
 LEGACY_CUTOFF_VERSION="1.0.2"
@@ -18,6 +20,12 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "===> Сохраняется пользовательская конфигурация sing-box перед установкой"
     prepare_migration_dir
     install -o root -g wheel -m 0600 "$CONFIG_FILE" "$MIGRATION_FILE"
+fi
+
+if [ -f "$RC_CONF_FILE" ]; then
+    echo "===> Сохраняется состояние автозапуска sing-box перед установкой"
+    prepare_migration_dir
+    install -o root -g wheel -m 0600 "$RC_CONF_FILE" "$RC_STATE_FILE"
 fi
 
 installed_version="$(pkg query '%v' os-sing-box 2>/dev/null || true)"
