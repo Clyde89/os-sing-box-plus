@@ -34,6 +34,7 @@ jobs:
           test -f tests/service-config.sh
           test -f tests/log-control.sh
           test -f tests/selection-validator.php
+          test -f tests/selector-compiler.php
           test -f tests/runtime-config-builder.php
           test -f tests/runtime-config-apply-static.sh
           test -f tests/mvc-settings-ui-static.sh
@@ -52,6 +53,7 @@ jobs:
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/DomainListField.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/ClientListField.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
           test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/SettingsController.php
@@ -73,6 +75,7 @@ jobs:
           grep -q 'licenselogic: "multi"' build.sh
           grep -q 'licenses: \[ "MIT", "BSD2CLAUSE", "GPLv3+" \]' build.sh
           grep -q 'Базовая конфигурация проверена sing-box' build.sh
+          grep -q 'Runtime/SelectorCompiler.php' build.sh
           grep -q '^SING_BOX_READINESS_ENABLE="NO"$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_SOURCE_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_UNDERLAY_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
@@ -91,6 +94,10 @@ jobs:
           grep -q '<id>settings.dns.redirectDomains</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q 'function previewAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
           grep -q 'function applyAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          grep -q "'policy_plan'" src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          grep -q "'policy_plan'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
+          grep -q 'fakeip-dns' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
+          grep -q 'source_ip_cidr' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           grep -q "'apply_ready'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           grep -q '^\[apply\]$' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
           grep -q 'runtime_config.php apply' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
@@ -212,6 +219,12 @@ jobs:
         run: |
           set -euo pipefail
           php tests/selection-validator.php
+
+      - name: Проверка компиляции policy-селекторов
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/selector-compiler.php
 
       - name: Проверка предварительного рендера runtime-конфигурации
         shell: bash
