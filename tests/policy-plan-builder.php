@@ -44,11 +44,13 @@ $selectedPlan = PolicyPlanBuilder::build(
     55353,
     '198.18.0.0/15',
     'tun_singbox',
-    '172.19.0.1/30'
+    '172.19.0.1/30',
+    'direct_bind',
+    '192.0.2.70'
 );
 
 assertPolicySame(true, $selectedPlan['required'], 'Policy-план с доменами должен требовать изменений OPNsense');
-assertPolicySame(false, $selectedPlan['ready'], 'Policy-план должен оставаться неготовым до настройки policy outbound');
+assertPolicySame(true, $selectedPlan['ready'], 'Policy-план с настроенным outbound должен быть декларативно готов');
 assertPolicySame(false, $selectedPlan['confirmation_required'], 'Selected mode не должен требовать подтверждения all_lan');
 assertPolicySame(['lan'], $selectedPlan['capture_interfaces'], 'Интерфейсы захвата selected mode');
 assertPolicySame(true, $selectedPlan['dns_redirect']['ready'], 'DNS redirect selected mode с клиентами и интерфейсом');
@@ -59,8 +61,10 @@ assertPolicySame(55353, $selectedPlan['dns_redirect']['target_port'], 'Целе�
 assertPolicySame(true, $selectedPlan['fakeip_route']['ready'], 'Готовность FakeIP route');
 assertPolicySame('198.18.0.0/15', $selectedPlan['fakeip_route']['network'], 'Сеть FakeIP route');
 assertPolicySame('tun_singbox', $selectedPlan['fakeip_route']['interface'], 'Интерфейс FakeIP route');
-assertPolicySame('unconfigured', $selectedPlan['policy_outbound']['mode'], 'Состояние policy outbound');
-assertPolicySame(false, $selectedPlan['policy_outbound']['ready'], 'Policy outbound пока не должен считаться готовым');
+assertPolicySame('direct_bind', $selectedPlan['policy_outbound']['mode'], 'Режим policy outbound');
+assertPolicySame(true, $selectedPlan['policy_outbound']['ready'], 'Policy outbound с bind address должен быть готов');
+assertPolicySame('policy-out', $selectedPlan['policy_outbound']['tag'], 'Тег policy outbound');
+assertPolicySame('192.0.2.70', $selectedPlan['policy_outbound']['bind_address'], 'IPv4-адрес policy outbound');
 assertPolicySame(3, count($selectedPlan['operations']), 'Количество декларативных операций selected mode');
 
 $udpOperation = $selectedPlan['operations'][0] ?? null;
@@ -80,6 +84,20 @@ assertPolicySame('tcp', $tcpOperation['protocol'] ?? null, 'Протокол TCP
 assertPolicySame('fakeip-route-ipv4', $routeOperation['id'] ?? null, 'ID FakeIP route');
 assertPolicySame('route', $routeOperation['type'] ?? null, 'Тип FakeIP route');
 
+$missingOutboundPlan = PolicyPlanBuilder::build(
+    'selected',
+    ['lan'],
+    ['192.0.2.10/32'],
+    ['domain' => ['example.org'], 'domain_suffix' => []],
+    '127.0.0.1',
+    55353,
+    '198.18.0.0/15',
+    'tun_singbox',
+    '172.19.0.1/30'
+);
+assertPolicySame(false, $missingOutboundPlan['ready'], 'Policy-план без bind address должен оставаться неготовым');
+assertPolicySame(false, $missingOutboundPlan['policy_outbound']['ready'], 'Policy outbound без bind address должен блокировать готовность');
+
 $missingClientsPlan = PolicyPlanBuilder::build(
     'selected',
     ['lan'],
@@ -89,7 +107,9 @@ $missingClientsPlan = PolicyPlanBuilder::build(
     55353,
     '198.18.0.0/15',
     'tun_singbox',
-    '172.19.0.1/30'
+    '172.19.0.1/30',
+    'direct_bind',
+    '192.0.2.70'
 );
 
 assertPolicySame(false, $missingClientsPlan['dns_redirect']['ready'], 'Selected mode без клиентов должен блокировать DNS redirect');
@@ -105,7 +125,9 @@ $missingInterfacesPlan = PolicyPlanBuilder::build(
     55353,
     '198.18.0.0/15',
     'tun_singbox',
-    '172.19.0.1/30'
+    '172.19.0.1/30',
+    'direct_bind',
+    '192.0.2.70'
 );
 
 assertPolicySame(false, $missingInterfacesPlan['dns_redirect']['ready'], 'Policy-план без интерфейсов должен блокировать DNS redirect');
@@ -120,7 +142,9 @@ $allLanPlan = PolicyPlanBuilder::build(
     55353,
     '198.18.0.0/15',
     'tun_singbox',
-    '172.19.0.1/30'
+    '172.19.0.1/30',
+    'direct_bind',
+    '192.0.2.70'
 );
 
 assertPolicySame(true, $allLanPlan['confirmation_required'], 'All LAN должен требовать явного подтверждения');
@@ -151,4 +175,26 @@ if (!$invalidModeRejected) {
     failPolicyTest('PolicyPlanBuilder должен отклонять неизвестный режим захвата.');
 }
 
-echo "Декларативный policy-план OPNsense с интерфейсами захвата проверен\n";
+$invalidOutboundRejected = false;
+try {
+    PolicyPlanBuilder::build(
+        'selected',
+        [],
+        [],
+        ['domain' => [], 'domain_suffix' => []],
+        '127.0.0.1',
+        55353,
+        '198.18.0.0/15',
+        'tun_singbox',
+        '172.19.0.1/30',
+        'unexpected'
+    );
+} catch (InvalidArgumentException $error) {
+    $invalidOutboundRejected = true;
+}
+
+if (!$invalidOutboundRejected) {
+    failPolicyTest('PolicyPlanBuilder должен отклонять неизвестный режим policy outbound.');
+}
+
+echo "Декларативный policy-план OPNsense с source-bound outbound проверен\n";
