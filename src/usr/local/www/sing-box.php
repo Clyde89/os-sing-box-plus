@@ -39,6 +39,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 const SINGBOX_CONFIG_FILE = '/usr/local/etc/sing-box/config.json';
 const SINGBOX_BINARY = '/usr/local/bin/sing-box';
+const CONFIGCTL_BINARY = '/usr/local/sbin/configctl';
 const SINGBOX_LOG_FILE = '/var/log/sing-box/sing-box.log';
 const STATUS_ENDPOINT = '/sing-box.php?ajax=status';
 const LOGS_ENDPOINT = '/sing-box_log.php';
@@ -178,7 +179,12 @@ function serviceAction($action)
         return [false, 'Недопустимое действие.'];
     }
 
-    [$output, $status] = runCommand('/usr/sbin/service sing-box ' . escapeshellarg($action));
+    if (!is_executable(CONFIGCTL_BINARY)) {
+        return [false, 'Системный интерфейс configd недоступен.'];
+    }
+
+    $command = escapeshellarg(CONFIGCTL_BINARY) . ' sing-box ' . escapeshellarg($action);
+    [$output, $status] = runCommand($command);
     if ($status === 0) {
         return [true, $messages[$action][0]];
     }
@@ -189,7 +195,12 @@ function serviceAction($action)
 
 function serviceStatus()
 {
-    [, $status] = runCommand('/usr/sbin/service sing-box status');
+    if (!is_executable(CONFIGCTL_BINARY)) {
+        return 'error';
+    }
+
+    $command = escapeshellarg(CONFIGCTL_BINARY) . ' sing-box status';
+    [, $status] = runCommand($command);
     return $status === 0 ? 'running' : 'stopped';
 }
 
