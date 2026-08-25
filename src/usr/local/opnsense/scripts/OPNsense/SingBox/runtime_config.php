@@ -187,6 +187,6 @@ try {
     if ($tempFile !== '') {
         @unlink($tempFile);
     }
-    fwrite(STDERR, 'ERROR Неожиданная ошибка применения runtime-конфигурации.' . PHP_EOL;
+    fwrite(STDERR, 'ERROR Неожиданная ошибка применения runtime-конфигурации.' . PHP_EOL);
     exit(70);
 }
