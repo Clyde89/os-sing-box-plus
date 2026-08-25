@@ -36,7 +36,17 @@ final class RuntimeConfigBuilder
 
         $compiledClients = SelectorCompiler::compileClients($clients);
         $compiledDomains = SelectorCompiler::compileDomains($redirectDomains);
-        $policyRequired = $redirectDomains !== [];
+        $policyPlan = PolicyPlanBuilder::build(
+            $captureMode,
+            $compiledClients,
+            $compiledDomains,
+            $dnsListenAddress,
+            $dnsListenPort,
+            $fakeIpRange,
+            $tunInterface,
+            $tunAddress
+        );
+        $policyRequired = $policyPlan['required'] === true;
 
         $dnsServers = [
             [
@@ -64,11 +74,10 @@ final class RuntimeConfigBuilder
                 $dnsRule['domain_suffix'] = $compiledDomains['domain_suffix'];
             }
 
-            $dnsRuleReady = true;
+            $dnsRuleReady = $policyPlan['dns_redirect']['ready'] === true;
             if ($captureMode === 'selected') {
-                if ($compiledClients === []) {
+                if (!$dnsRuleReady) {
                     $warnings[] = 'Для режима выбранных клиентов необходимо указать хотя бы один IP-адрес, CIDR или диапазон.';
-                    $dnsRuleReady = false;
                 } else {
                     $dnsRule['source_ip_cidr'] = $compiledClients;
                 }
@@ -150,36 +159,7 @@ final class RuntimeConfigBuilder
                 'domain' => $compiledDomains['domain'],
                 'domain_suffix' => $compiledDomains['domain_suffix'],
             ],
-            'policy_plan' => [
-                'capture_mode' => $captureMode,
-                'source_ip_cidr' => $compiledClients,
-                'domain' => $compiledDomains['domain'],
-                'domain_suffix' => $compiledDomains['domain_suffix'],
-                'dns_listener' => [
-                    'address' => $dnsListenAddress,
-                    'port' => $dnsListenPort,
-                ],
-                'dns_redirect' => [
-                    'required' => $policyRequired,
-                    'protocols' => ['udp', 'tcp'],
-                    'destination_port' => 53,
-                    'source_ip_cidr' => $captureMode === 'selected' ? $compiledClients : [],
-                    'target_address' => $dnsListenAddress,
-                    'target_port' => $dnsListenPort,
-                ],
-                'fakeip_route' => [
-                    'required' => $policyRequired,
-                    'network' => $fakeIpRange,
-                    'interface' => $tunInterface,
-                ],
-                'tun_interface' => $tunInterface,
-                'tun_address' => $tunAddress,
-                'fakeip_ipv4_range' => $fakeIpRange,
-                'dns_query_types' => ['A'],
-                'requires_opnsense_dns_redirect' => $policyRequired,
-                'requires_opnsense_fakeip_route' => $policyRequired,
-                'requires_policy_outbound' => $policyRequired,
-            ],
+            'policy_plan' => $policyPlan,
             'warnings' => $warnings,
             'apply_ready' => $warnings === [],
         ];
