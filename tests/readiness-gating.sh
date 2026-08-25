@@ -49,4 +49,10 @@ EOF
 printf '%s\n' 'sing_box_enable="YES"' > "$RC_FILE"
 run_quiet --event newwanip --interfaces lan
 
-printf '%s\n' 'Проверки безопасного отключения механизма восстановления пройдены.'
+grep -q '^acquire_lock()' "$HELPER"
+grep -q 'LOCK_PID_FILE="${LOCK_DIR}/pid"' "$HELPER"
+grep -q 'kill -0 "$lock_pid"' "$HELPER"
+grep -q 'устаревшая блокировка готовности очищена' "$HELPER"
+grep -q 'if \[ "$lock_pid" = "\$\$" \]; then' "$HELPER"
+
+printf '%s\n' 'Проверки безопасного отключения и блокировки механизма восстановления пройдены.'
