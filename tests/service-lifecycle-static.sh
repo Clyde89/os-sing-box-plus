@@ -14,6 +14,7 @@ grep -q 'cleanup_failed_start "$started_pid"' "$RC_SCRIPT"
 grep -q 'chmod 0600 "$pidfile"' "$RC_SCRIPT"
 grep -q 'PID-файл указывал на другой процесс' "$RC_SCRIPT"
 grep -q 'Процесс sing-box уже запущен, но интерфейс tun_singbox отсутствует.' "$RC_SCRIPT"
+grep -q 'Процесс sing-box работает, но интерфейс tun_singbox отсутствует.' "$RC_SCRIPT"
 grep -q 'Интерфейс tun_singbox не был создан за 20 секунд; запуск отменён.' "$RC_SCRIPT"
 grep -q 'Служба sing-box запущена, но отложенные правила firewall не применены.' "$RC_SCRIPT"
 
@@ -23,8 +24,10 @@ fi
 
 pending_line="$(grep -n 'if ! apply_pending_filter_reload; then' "$RC_SCRIPT" | tail -n 1 | cut -d: -f1)"
 success_line="$(grep -n 'echo "Служба запущена, PID \$started_pid."' "$RC_SCRIPT" | cut -d: -f1)"
+status_tun_line="$(grep -n 'Процесс sing-box работает, но интерфейс tun_singbox отсутствует.' "$RC_SCRIPT" | cut -d: -f1)"
 [ -n "$pending_line" ]
 [ -n "$success_line" ]
+[ -n "$status_tun_line" ]
 [ "$pending_line" -lt "$success_line" ]
 
 echo "Защиты жизненного цикла службы sing-box проверены"
