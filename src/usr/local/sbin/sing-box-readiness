@@ -6,6 +6,7 @@ TAG="sing-box-readiness"
 CONFIG_FILE="${SING_BOX_READINESS_CONFIG_FILE:-/usr/local/etc/sing-box/readiness.conf}"
 RC_CONF_FILE="${SING_BOX_READINESS_RC_CONF_FILE:-/etc/rc.conf.d/sing_box}"
 LOCK_DIR="${SING_BOX_READINESS_LOCK_DIR:-/var/run/sing-box-readiness.lock}"
+LOCK_PID_FILE="${LOCK_DIR}/pid"
 EVENT="manual"
 EVENT_INTERFACES=""
 DNS_OK=0
@@ -19,7 +20,52 @@ log_msg()
 
 cleanup()
 {
-    rmdir "$LOCK_DIR" 2>/dev/null || true
+    if [ -f "$LOCK_PID_FILE" ]; then
+        lock_pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+        if [ "$lock_pid" = "$$" ]; then
+            rm -f "$LOCK_PID_FILE"
+            rmdir "$LOCK_DIR" 2>/dev/null || true
+        fi
+    fi
+}
+
+acquire_lock()
+{
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        chmod 0700 "$LOCK_DIR" 2>/dev/null || true
+        printf '%s\n' "$$" > "$LOCK_PID_FILE"
+        chmod 0600 "$LOCK_PID_FILE" 2>/dev/null || true
+        return 0
+    fi
+
+    lock_pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+    case "$lock_pid" in
+        ''|*[!0-9]*)
+            ;;
+        *)
+            if kill -0 "$lock_pid" 2>/dev/null; then
+                log_msg "другая проверка готовности уже выполняется, PID $lock_pid"
+                return 1
+            fi
+            ;;
+    esac
+
+    rm -f "$LOCK_PID_FILE"
+    if ! rmdir "$LOCK_DIR" 2>/dev/null; then
+        log_msg "не удалось очистить устаревшую блокировку готовности"
+        return 1
+    fi
+
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        log_msg "не удалось получить блокировку готовности после очистки устаревшего состояния"
+        return 1
+    fi
+
+    chmod 0700 "$LOCK_DIR" 2>/dev/null || true
+    printf '%s\n' "$$" > "$LOCK_PID_FILE"
+    chmod 0600 "$LOCK_PID_FILE" 2>/dev/null || true
+    log_msg "устаревшая блокировка готовности очищена"
+    return 0
 }
 
 service_is_enabled()
@@ -187,8 +233,7 @@ is_enabled || exit 0
 interface_is_selected || exit 0
 validate_config || exit 0
 
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    log_msg "другая проверка готовности уже выполняется"
+if ! acquire_lock; then
     exit 0
 fi
 trap cleanup EXIT HUP INT TERM
