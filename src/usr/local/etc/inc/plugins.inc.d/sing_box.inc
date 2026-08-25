@@ -25,7 +25,7 @@ function sing_box_policy_is_managed()
 
 function sing_box_policy_is_active()
 {
-    return sing_box_policy_is_managed() && is_file('/var/db/os-sing-box/policy-active');
+    return sing_box_policy_is_managed() && is_file('/var/run/sing-box-policy-active');
 }
 
 function sing_box_load_policy_plan()
