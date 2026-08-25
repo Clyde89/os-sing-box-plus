@@ -27,6 +27,7 @@ jobs:
           test -d tests
           test -f tests/readiness-gating.sh
           test -f tests/migrate-legacy.sh
+          test -f tests/migrate-legacy-cases.sh
           test -f tests/service-lifecycle-static.sh
           test -f tests/stubs/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
@@ -119,6 +120,7 @@ jobs:
         run: |
           set -euo pipefail
           sh tests/migrate-legacy.sh
+          sh tests/migrate-legacy-cases.sh
 
       - name: Установка PHP CLI
         shell: bash
