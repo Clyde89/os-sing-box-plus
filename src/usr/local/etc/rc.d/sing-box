@@ -252,6 +252,10 @@ sing_box_status() {
     fi
 
     if process_is_sing_box "$pid"; then
+        if ! ifconfig tun_singbox >/dev/null 2>&1; then
+            echo "Процесс sing-box работает, но интерфейс tun_singbox отсутствует."
+            return 1
+        fi
         echo "Служба sing-box работает, PID $pid."
         return 0
     fi
