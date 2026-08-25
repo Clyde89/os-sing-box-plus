@@ -37,10 +37,15 @@ fi
 if [ "$comparison" = "<" ] || [ "$comparison" = "=" ]; then
     echo "===> Сохраняется состояние OPNsense для миграции legacy-пакета os-sing-box $installed_version"
     prepare_migration_dir
-    printf '%s\n' "$installed_version" > "$LEGACY_VERSION_FILE"
-    chmod 0600 "$LEGACY_VERSION_FILE"
 
-    if [ -f "$SYSTEM_CONFIG" ]; then
+    if [ ! -f "$LEGACY_VERSION_FILE" ]; then
+        printf '%s\n' "$installed_version" > "$LEGACY_VERSION_FILE"
+        chmod 0600 "$LEGACY_VERSION_FILE"
+    fi
+
+    if [ -f "$SYSTEM_CONFIG" ] && [ ! -f "$LEGACY_CONFIG_SNAPSHOT" ]; then
         install -o root -g wheel -m 0600 "$SYSTEM_CONFIG" "$LEGACY_CONFIG_SNAPSHOT"
+    elif [ -f "$LEGACY_CONFIG_SNAPSHOT" ]; then
+        echo "===> Сохранён ранее созданный исходный снимок legacy-конфигурации OPNsense"
     fi
 fi
