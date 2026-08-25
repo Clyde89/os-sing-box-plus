@@ -36,6 +36,7 @@ final class RuntimeConfigBuilder
 
         $compiledClients = SelectorCompiler::compileClients($clients);
         $compiledDomains = SelectorCompiler::compileDomains($redirectDomains);
+        $policyRequired = $redirectDomains !== [];
 
         $dnsServers = [
             [
@@ -46,7 +47,7 @@ final class RuntimeConfigBuilder
         $dnsRules = [];
         $warnings = [];
 
-        if ($redirectDomains !== []) {
+        if ($policyRequired) {
             $dnsServers[] = [
                 'type' => 'fakeip',
                 'tag' => 'fakeip-dns',
@@ -154,11 +155,30 @@ final class RuntimeConfigBuilder
                 'source_ip_cidr' => $compiledClients,
                 'domain' => $compiledDomains['domain'],
                 'domain_suffix' => $compiledDomains['domain_suffix'],
+                'dns_listener' => [
+                    'address' => $dnsListenAddress,
+                    'port' => $dnsListenPort,
+                ],
+                'dns_redirect' => [
+                    'required' => $policyRequired,
+                    'protocols' => ['udp', 'tcp'],
+                    'destination_port' => 53,
+                    'source_ip_cidr' => $captureMode === 'selected' ? $compiledClients : [],
+                    'target_address' => $dnsListenAddress,
+                    'target_port' => $dnsListenPort,
+                ],
+                'fakeip_route' => [
+                    'required' => $policyRequired,
+                    'network' => $fakeIpRange,
+                    'interface' => $tunInterface,
+                ],
+                'tun_interface' => $tunInterface,
+                'tun_address' => $tunAddress,
                 'fakeip_ipv4_range' => $fakeIpRange,
                 'dns_query_types' => ['A'],
-                'requires_opnsense_dns_redirect' => $redirectDomains !== [],
-                'requires_opnsense_fakeip_route' => $redirectDomains !== [],
-                'requires_policy_outbound' => $redirectDomains !== [],
+                'requires_opnsense_dns_redirect' => $policyRequired,
+                'requires_opnsense_fakeip_route' => $policyRequired,
+                'requires_policy_outbound' => $policyRequired,
             ],
             'warnings' => $warnings,
             'apply_ready' => $warnings === [],
