@@ -29,6 +29,7 @@ jobs:
           test -f tests/migrate-legacy.sh
           test -f tests/migrate-legacy-cases.sh
           test -f tests/service-lifecycle-static.sh
+          test -f tests/service-policy-lifecycle.sh
           test -f tests/package-install-static.sh
           test -f tests/webui-safety-static.sh
           test -f tests/service-config.sh
@@ -183,6 +184,12 @@ jobs:
         run: |
           set -euo pipefail
           sh tests/service-lifecycle-static.sh
+
+      - name: Проверка отката policy-правил firewall
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/service-policy-lifecycle.sh
 
       - name: Проверка безопасного состояния установки пакета
         shell: bash
