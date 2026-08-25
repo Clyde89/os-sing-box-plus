@@ -27,6 +27,7 @@ jobs:
           test -d tests
           test -f tests/readiness-gating.sh
           test -f tests/migrate-legacy.sh
+          test -f tests/service-lifecycle-static.sh
           test -f tests/stubs/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
@@ -100,6 +101,12 @@ jobs:
             sh -n "$file"
             echo "OK $file"
           done < <(find src packaging tests -type f \( -name '*.sh' -o -path '*/rc.d/*' -o -path '*/rc.syshook.d/*' -o -path '*/sbin/sing-box-readiness' -o -name '+PRE_INSTALL' -o -name '+POST_INSTALL' -o -name '+PRE_DEINSTALL' -o -name '+POST_DEINSTALL' \) -print0)
+
+      - name: Проверка защит жизненного цикла службы
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/service-lifecycle-static.sh
 
       - name: Проверка безопасного отключения восстановления
         shell: bash
