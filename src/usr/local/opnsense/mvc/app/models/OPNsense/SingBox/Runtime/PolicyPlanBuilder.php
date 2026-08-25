@@ -16,10 +16,15 @@ final class PolicyPlanBuilder
         int $dnsListenPort,
         string $fakeIpRange,
         string $tunInterface,
-        string $tunAddress
+        string $tunAddress,
+        string $policyOutboundMode = 'direct_bind',
+        string $policyBindAddress = ''
     ): array {
         if (!in_array($captureMode, ['selected', 'all_lan'], true)) {
             throw new \InvalidArgumentException('Неподдерживаемый режим захвата policy-плана.');
+        }
+        if ($policyOutboundMode !== 'direct_bind') {
+            throw new \InvalidArgumentException('Неподдерживаемый режим policy outbound.');
         }
 
         $domains = is_array($compiledDomains['domain'] ?? null) ? $compiledDomains['domain'] : [];
@@ -47,10 +52,13 @@ final class PolicyPlanBuilder
             'interface' => $tunInterface,
         ];
 
+        $policyOutboundReady = !$policyRequired || $policyBindAddress !== '';
         $policyOutbound = [
             'required' => $policyRequired,
-            'ready' => !$policyRequired,
-            'mode' => $policyRequired ? 'unconfigured' : 'not_required',
+            'ready' => $policyOutboundReady,
+            'mode' => $policyRequired ? $policyOutboundMode : 'not_required',
+            'tag' => $policyRequired ? 'policy-out' : null,
+            'bind_address' => $policyRequired ? $policyBindAddress : null,
         ];
 
         $operations = [];
