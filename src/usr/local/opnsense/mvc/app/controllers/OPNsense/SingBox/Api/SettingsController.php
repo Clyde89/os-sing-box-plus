@@ -65,6 +65,7 @@ class SettingsController extends ApiMutableModelControllerBase
                 'warnings' => $warnings,
                 'selectors' => $plan['selectors'],
                 'policy_plan' => $plan['policy_plan'] ?? [],
+                'policy_sha256' => $plan['policy_sha256'] ?? null,
                 'config' => $config,
                 'sha256' => hash('sha256', $config),
             ];
