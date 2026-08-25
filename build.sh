@@ -61,6 +61,7 @@ need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/Cli
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/FakeIpRangeField.php"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php"
+need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php"
 need_file "src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php"
 need_file "src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/SettingsController.php"
