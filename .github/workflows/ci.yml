@@ -41,7 +41,8 @@ jobs:
           test ! -e src/usr/local/www/sing-box_sub_log.php
           grep -q 'VERSION="${VERSION:-1.1.0}"' build.sh
           grep -q 'SING_BOX_RELEASE=.*v1.13.13-vincent' build.sh
-          grep -q 'SING_BOX_SHA256=' build.sh
+          grep -q 'SING_BOX_ASSET_SHA256=.*3ba254d792964cd1005946354e0c8250a05955381bdcbd19f57265a339b199d7' build.sh
+          grep -q 'SING_BOX_SHA256=.*1da7e84757a5ff5d13d4154b4e4055ea5f99d069c2423687fe8165bf504be7d0' build.sh
           grep -q '^SING_BOX_READINESS_ENABLE="NO"$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_SOURCE_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_UNDERLAY_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
@@ -55,6 +56,10 @@ jobs:
           grep -q '"product_version":"1.1.0"' src/usr/local/opnsense/version/sing-box
           if grep -q '/releases/latest/' build.sh; then
             echo 'Обнаружена плавающая ссылка releases/latest' >&2
+            exit 1
+          fi
+          if grep -q 'origin: "ftp/curl"' build.sh; then
+            echo 'Обнаружена лишняя runtime-зависимость пакета от curl' >&2
             exit 1
           fi
 
