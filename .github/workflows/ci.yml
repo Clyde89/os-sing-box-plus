@@ -37,6 +37,9 @@ jobs:
           test -f src/usr/local/etc/rc.syshook.d/start/70-sing-box-readiness
           test -f src/usr/local/sbin/sing-box-readiness
           test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
+          test -f src/usr/local/share/licenses/os-sing-box/LICENSE.plugin
+          test -f src/usr/local/share/licenses/os-sing-box/LICENSE.opnsense
+          test -f src/usr/local/share/licenses/os-sing-box/LICENSE.sing-box
           test ! -e src/usr/local/etc/sing-box/config.json
           test ! -e src/usr/local/etc/sing-box/readiness.conf
           test ! -e src/usr/bin/sing_box_sub
@@ -47,8 +50,9 @@ jobs:
           grep -q 'SING_BOX_ASSET_SHA256=.*3ba254d792964cd1005946354e0c8250a05955381bdcbd19f57265a339b199d7' build.sh
           grep -q 'SING_BOX_SHA256=.*1da7e84757a5ff5d13d4154b4e4055ea5f99d069c2423687fe8165bf504be7d0' build.sh
           grep -q 'categories: \[ "net" \]' build.sh
-          grep -q 'licenselogic: "single"' build.sh
-          grep -q 'licenses: \[ "MIT" \]' build.sh
+          grep -q 'licenselogic: "multi"' build.sh
+          grep -q 'licenses: \[ "MIT", "BSD2CLAUSE", "GPLv3+" \]' build.sh
+          grep -q 'Базовая конфигурация проверена sing-box' build.sh
           grep -q '^SING_BOX_READINESS_ENABLE="NO"$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_SOURCE_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
           grep -q '^SING_BOX_READINESS_UNDERLAY_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
@@ -102,6 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           sh -n build.sh
+          sh -n src/usr/local/etc/sing-box/readiness.conf.sample
           while IFS= read -r -d '' file; do
             sh -n "$file"
             echo "OK $file"
