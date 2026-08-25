@@ -35,6 +35,7 @@ jobs:
           test -f tests/log-control.sh
           test -f tests/selection-validator.php
           test -f tests/runtime-config-builder.php
+          test -f tests/runtime-config-apply-static.sh
           test -f tests/stubs/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
@@ -44,6 +45,8 @@ jobs:
           test -x src/usr/local/sbin/sing-box-service-config
           test -x src/usr/local/sbin/sing-box-logctl
           test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
+          test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/DomainListField.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/ClientListField.php
@@ -84,7 +87,11 @@ jobs:
           grep -q '<id>settings.capture.clients</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q '<id>settings.dns.redirectDomains</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q 'function previewAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          grep -q 'function applyAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
           grep -q "'apply_ready'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
+          grep -q '^\[apply\]$' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
+          grep -q 'runtime_config.php apply' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
+          grep -Fq 'chmod 0755 "$STAGEDIR/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php"' build.sh
           if grep -q '/releases/latest/' build.sh; then
             echo 'Обнаружена плавающая ссылка releases/latest' >&2
             exit 1
@@ -202,3 +209,9 @@ jobs:
         run: |
           set -euo pipefail
           php tests/runtime-config-builder.php
+
+      - name: Проверка безопасного применения runtime-конфигурации
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/runtime-config-apply-static.sh
