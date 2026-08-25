@@ -16,7 +16,6 @@ LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
 LEGACY_MIGRATOR="/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php"
 legacy_migration_processed=0
 legacy_migration_failed=0
-service_restart_failed=0
 
 echo "===> Настраивается os-sing-box"
 
@@ -63,7 +62,6 @@ service configd restart >/dev/null 2>&1 || true
 
 if [ "$legacy_migration_failed" -eq 0 ] && grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE" 2>/dev/null; then
     if ! service sing-box restart >/dev/null 2>&1; then
-        service_restart_failed=1
         if [ "$legacy_migration_processed" -eq 1 ]; then
             legacy_migration_failed=1
             echo "Ошибка: sing-box не запустился после legacy-миграции; миграционные данные сохранены" >&2
