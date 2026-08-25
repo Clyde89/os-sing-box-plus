@@ -4,6 +4,7 @@
         <patterns>
             <pattern>sing-box.php*</pattern>
             <pattern>sing-box_log.php*</pattern>
+            <pattern>api/singbox/settings/*</pattern>
         </patterns>
     </page-vpn-sing-box>
 </acl>
