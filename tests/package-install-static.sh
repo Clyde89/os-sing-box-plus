@@ -7,10 +7,17 @@ POST_INSTALL="$ROOT_DIR/packaging/freebsd/+POST_INSTALL"
 PRE_DEINSTALL="$ROOT_DIR/packaging/freebsd/+PRE_DEINSTALL"
 POST_DEINSTALL="$ROOT_DIR/packaging/freebsd/+POST_DEINSTALL"
 RC_SCRIPT="$ROOT_DIR/src/usr/local/etc/rc.d/sing-box"
+BUILD_SCRIPT="$ROOT_DIR/build.sh"
+MAKEFILE="$ROOT_DIR/Makefile"
 
-for file in "$PRE_INSTALL" "$POST_INSTALL" "$PRE_DEINSTALL" "$POST_DEINSTALL" "$RC_SCRIPT"; do
+for file in "$PRE_INSTALL" "$POST_INSTALL" "$PRE_DEINSTALL" "$POST_DEINSTALL" "$RC_SCRIPT" "$BUILD_SCRIPT" "$MAKEFILE"; do
     [ -f "$file" ]
 done
+
+grep -q '^VERSION?=[[:space:]]*1\.1\.0$' "$MAKEFILE"
+grep -Fq 'VERSION="${VERSION:-1.1.0}"' "$BUILD_SCRIPT"
+grep -Fq 'need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanValidator.php"' "$BUILD_SCRIPT"
+grep -Fq 'need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/FirewallRuleBuilder.php"' "$BUILD_SCRIPT"
 
 grep -q 'RC_STATE_FILE=.*sing_box.rc.upgrade' "$PRE_INSTALL"
 grep -q 'install -o root -g wheel -m 0600 "$RC_CONF_FILE" "$RC_STATE_FILE"' "$PRE_INSTALL"

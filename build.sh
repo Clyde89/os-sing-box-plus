@@ -63,6 +63,8 @@ need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/Fak
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php"
+need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanValidator.php"
+need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/FirewallRuleBuilder.php"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php"
 need_file "src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php"
 need_file "src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/SettingsController.php"

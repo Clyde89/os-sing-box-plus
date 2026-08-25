@@ -79,6 +79,7 @@ jobs:
           test ! -e src/usr/local/www/sing-box_sub.php
           test ! -e src/usr/local/www/sing-box_sub_log.php
           grep -q 'VERSION="${VERSION:-1.1.0}"' build.sh
+          grep -q '^VERSION?=[[:space:]]*1\.1\.0$' Makefile
           grep -q 'SING_BOX_RELEASE=.*v1.13.13-vincent' build.sh
           grep -q 'SING_BOX_ASSET_SHA256=.*3ba254d792964cd1005946354e0c8250a05955381bdcbd19f57265a339b199d7' build.sh
           grep -q 'SING_BOX_SHA256=.*1da7e84757a5ff5d13d4154b4e4055ea5f99d069c2423687fe8165bf504be7d0' build.sh
@@ -88,6 +89,8 @@ jobs:
           grep -q 'Базовая конфигурация проверена sing-box' build.sh
           grep -q 'Runtime/SelectorCompiler.php' build.sh
           grep -q 'Runtime/PolicyPlanBuilder.php' build.sh
+          grep -q 'Runtime/PolicyPlanValidator.php' build.sh
+          grep -q 'Runtime/FirewallRuleBuilder.php' build.sh
           grep -q 'FieldTypes/CaptureInterfaceField.php' build.sh
           grep -q 'FieldTypes/FakeIpRangeField.php' build.sh
           grep -q '^SING_BOX_READINESS_ENABLE="NO"$' src/usr/local/etc/sing-box/readiness.conf.sample
