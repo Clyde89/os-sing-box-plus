@@ -12,6 +12,15 @@ $config = [
     ],
 ];
 
+$currentConfigFile = getenv('MIGRATION_TEST_CURRENT_CONFIG');
+if ($currentConfigFile !== false && $currentConfigFile !== '' && is_readable($currentConfigFile)) {
+    $content = file_get_contents($currentConfigFile);
+    $decoded = $content === false ? null : json_decode($content, true);
+    if (is_array($decoded)) {
+        $config = $decoded;
+    }
+}
+
 function load_config_from_file($filename)
 {
     $content = file_get_contents($filename);
