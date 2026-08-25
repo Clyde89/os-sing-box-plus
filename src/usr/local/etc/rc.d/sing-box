@@ -17,6 +17,7 @@ logfile="${logdir}/sing-box.log"
 command="/usr/local/bin/sing-box"
 config="/usr/local/etc/sing-box/config.json"
 pending_filter_reload="/var/db/os-sing-box/filter-reload.pending"
+setup_required="/var/db/os-sing-box/setup-required"
 
 # shellcheck disable=SC2034
 start_cmd="${name}_start"
@@ -116,6 +117,11 @@ apply_pending_filter_reload() {
 
 sing_box_start() {
     echo "Запуск sing-box..."
+
+    if [ -f "$setup_required" ]; then
+        echo "Запуск sing-box отклонён: первоначальная настройка не завершена."
+        return 1
+    fi
 
     if ! ensure_log_path; then
         echo "Не удалось подготовить файл журнала: $logfile"
