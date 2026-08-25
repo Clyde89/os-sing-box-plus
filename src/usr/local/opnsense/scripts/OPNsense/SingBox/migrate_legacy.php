@@ -75,24 +75,44 @@ if ($legacyInterface !== null && $currentInterfaceKey === null) {
 }
 
 $rules = &config_read_array('filter', 'rule');
-$currentRuleExists = false;
-foreach ($rules as $rule) {
+$currentRuleIndex = null;
+foreach ($rules as $ruleIndex => $rule) {
     if (is_array($rule) && ($rule['@attributes']['uuid'] ?? '') === LEGACY_RULE_UUID) {
-        $currentRuleExists = true;
+        $currentRuleIndex = $ruleIndex;
         break;
     }
 }
 
-if ($legacyRule !== null && !$currentRuleExists) {
-    if ($legacyInterfaceKey !== null && $currentInterfaceKey !== null && $legacyInterfaceKey !== $currentInterfaceKey) {
+if ($legacyRule !== null && $legacyInterfaceKey !== null && $currentInterfaceKey !== null && $legacyInterfaceKey !== $currentInterfaceKey) {
+    if ($currentRuleIndex === null) {
         if (($legacyRule['interface'] ?? '') === $legacyInterfaceKey) {
             $legacyRule['interface'] = $currentInterfaceKey;
         }
         if (($legacyRule['source']['network'] ?? '') === $legacyInterfaceKey) {
             $legacyRule['source']['network'] = $currentInterfaceKey;
         }
-    }
+    } else {
+        $existingRule = $rules[$currentRuleIndex];
+        $ruleChanged = false;
 
+        if (($existingRule['interface'] ?? '') === $legacyInterfaceKey) {
+            $existingRule['interface'] = $currentInterfaceKey;
+            $ruleChanged = true;
+        }
+        if (($existingRule['source']['network'] ?? '') === $legacyInterfaceKey) {
+            $existingRule['source']['network'] = $currentInterfaceKey;
+            $ruleChanged = true;
+        }
+
+        if ($ruleChanged) {
+            $rules[$currentRuleIndex] = $existingRule;
+            $changed = true;
+            echo 'Обновлена привязка существующего legacy-правила firewall для sing-box.' . PHP_EOL;
+        }
+    }
+}
+
+if ($legacyRule !== null && $currentRuleIndex === null) {
     $rules[] = $legacyRule;
     $changed = true;
     echo 'Восстановлено legacy-правило firewall для sing-box.' . PHP_EOL;
