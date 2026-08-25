@@ -32,6 +32,13 @@
         <help>Локальный порт DNS-listener sing-box.</help>
     </field>
     <field>
+        <id>settings.dns.fakeIpRange</id>
+        <label>Диапазон FakeIP IPv4</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Диапазон адресов, выдаваемых FakeIP для выбранных доменов. Рекомендуется оставить 198.18.0.0/15, если эта сеть не используется в локальной инфраструктуре.</help>
+    </field>
+    <field>
         <id>settings.tun.interfaceName</id>
         <label>Имя TUN-интерфейса</label>
         <type>text</type>
