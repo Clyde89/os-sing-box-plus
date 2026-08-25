@@ -3,11 +3,22 @@ set -eu
 
 LOG_FILE="${SING_BOX_LOG_FILE:-/var/log/sing-box/sing-box.log}"
 LOG_DIR="$(dirname "$LOG_FILE")"
+LOG_OWNER="${SING_BOX_LOG_OWNER-root}"
+LOG_GROUP="${SING_BOX_LOG_GROUP-wheel}"
+LOG_MODE="${SING_BOX_LOG_MODE:-0640}"
 
 usage()
 {
     echo "Использование: $0 clear" >&2
     exit 64
+}
+
+set_log_permissions()
+{
+    if [ -n "$LOG_OWNER" ] && [ -n "$LOG_GROUP" ]; then
+        chown "${LOG_OWNER}:${LOG_GROUP}" "$LOG_FILE"
+    fi
+    chmod "$LOG_MODE" "$LOG_FILE"
 }
 
 prepare_log()
@@ -17,8 +28,7 @@ prepare_log()
     fi
 
     touch "$LOG_FILE"
-    chown root:wheel "$LOG_FILE"
-    chmod 0640 "$LOG_FILE"
+    set_log_permissions
 }
 
 [ "$#" -eq 1 ] || usage
@@ -27,8 +37,7 @@ case "$1" in
     clear)
         prepare_log
         : > "$LOG_FILE"
-        chown root:wheel "$LOG_FILE"
-        chmod 0640 "$LOG_FILE"
+        set_log_permissions
         echo "Журнал sing-box очищен."
         ;;
     *)
