@@ -3,6 +3,7 @@
 
 require_once('config.inc');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.php');
+require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php');
 
@@ -186,6 +187,6 @@ try {
     if ($tempFile !== '') {
         @unlink($tempFile);
     }
-    fwrite(STDERR, 'ERROR Неожиданная ошибка применения runtime-конфигурации.' . PHP_EOL);
+    fwrite(STDERR, 'ERROR Неожиданная ошибка применения runtime-конфигурации.' . PHP_EOL;
     exit(70);
 }
