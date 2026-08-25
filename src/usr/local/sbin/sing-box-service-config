@@ -3,6 +3,7 @@ set -eu
 
 RC_CONF_FILE="${SING_BOX_RC_CONF_FILE:-/etc/rc.conf.d/sing_box}"
 RC_CONF_DIR="$(dirname "$RC_CONF_FILE")"
+SETUP_REQUIRED_FILE="${SING_BOX_SETUP_REQUIRED_FILE:-/var/db/os-sing-box/setup-required}"
 
 usage()
 {
@@ -35,6 +36,10 @@ current_state()
 
 case "$1" in
     enable)
+        if [ -f "$SETUP_REQUIRED_FILE" ]; then
+            echo "Автозапуск sing-box не включён: первоначальная настройка не завершена." >&2
+            exit 65
+        fi
         write_state "YES"
         echo "Автозапуск sing-box включён."
         ;;
