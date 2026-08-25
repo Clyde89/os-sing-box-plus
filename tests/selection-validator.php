@@ -20,6 +20,18 @@ function assertInvalid(array $messages, string $label): void
     }
 }
 
+function assertMessageContains(array $messages, string $needle, string $label): void
+{
+    foreach ($messages as $message) {
+        if (str_contains($message, $needle)) {
+            return;
+        }
+    }
+
+    fwrite(STDERR, $label . ': ожидаемый фрагмент сообщения не найден.' . PHP_EOL);
+    exit(1);
+}
+
 assertValid(
     SelectionValidator::validateDomains("example.org\n*.sub.example.org\nexample.net.\nxn--e1afmkfd.xn--p1ai\n"),
     'Корректные домены'
@@ -46,10 +58,23 @@ assertInvalid(SelectionValidator::validateClients("192.0.2.10-2001:db8::10\n"), 
 assertInvalid(SelectionValidator::validateClients("192.0.2.10\n192.0.2.10\n"), 'Повтор клиента');
 assertInvalid(SelectionValidator::validateClients("client.example.org\n"), 'Домен вместо клиента');
 
+assertValid(SelectionValidator::validateIpv4Network('198.18.0.0/15'), 'Стандартный диапазон FakeIP');
+assertValid(SelectionValidator::validateIpv4Network('10.0.0.0/8'), 'Пользовательская IPv4-сеть FakeIP');
+assertValid(SelectionValidator::validateIpv4Network('0.0.0.0/0'), 'IPv4-сеть с нулевым префиксом');
+assertInvalid(SelectionValidator::validateIpv4Network('198.18.0.1/15'), 'Host-биты в диапазоне FakeIP');
+assertMessageContains(
+    SelectionValidator::validateIpv4Network('198.18.0.1/15'),
+    '198.18.0.0/15',
+    'Подсказка корректного адреса сети FakeIP'
+);
+assertInvalid(SelectionValidator::validateIpv4Network('2001:db8::/64'), 'IPv6 вместо FakeIP IPv4');
+assertInvalid(SelectionValidator::validateIpv4Network('198.18.0.0/33'), 'Некорректный префикс FakeIP IPv4');
+assertInvalid(SelectionValidator::validateIpv4Network('198.18.0.0'), 'FakeIP без CIDR-префикса');
+
 $tooManyItems = [];
 for ($index = 0; $index < 4097; $index++) {
     $tooManyItems[] = sprintf('2001:db8:%x::1', $index);
 }
 assertInvalid(SelectionValidator::validateClients(implode("\n", $tooManyItems)), 'Превышение количества элементов');
 
-echo "Валидация списков доменов и клиентов проверена\n";
+echo "Валидация доменов, клиентов и диапазона FakeIP проверена\n";
