@@ -17,6 +17,46 @@ final class SelectionValidator
         return self::validateList($value, [self::class, 'validateClient']);
     }
 
+    public static function validateCaptureInterfaces($value): array
+    {
+        if (is_array($value)) {
+            $items = $value;
+        } elseif (is_scalar($value) || (is_object($value) && method_exists($value, '__toString'))) {
+            $raw = trim((string)$value);
+            $items = $raw === '' ? [] : preg_split('/[\s,]+/', $raw) ?: [];
+        } else {
+            return ['Список интерфейсов имеет неподдерживаемый формат.'];
+        }
+
+        $messages = [];
+        $seen = [];
+        foreach ($items as $item) {
+            $interface = trim((string)$item);
+            if ($interface === '') {
+                continue;
+            }
+
+            if (preg_match('/^[A-Za-z0-9_.-]{1,32}$/', $interface) !== 1) {
+                $messages[] = 'Обнаружено некорректное имя интерфейса.';
+                continue;
+            }
+
+            $normalized = strtolower($interface);
+            if ($normalized === 'wan') {
+                $messages[] = 'Интерфейс WAN нельзя использовать для автоматического захвата трафика.';
+                continue;
+            }
+
+            if (isset($seen[$normalized])) {
+                $messages[] = 'Обнаружен повторяющийся интерфейс захвата.';
+                continue;
+            }
+            $seen[$normalized] = true;
+        }
+
+        return $messages;
+    }
+
     public static function validateIpv4Network(string $value): array
     {
         $value = trim($value);
