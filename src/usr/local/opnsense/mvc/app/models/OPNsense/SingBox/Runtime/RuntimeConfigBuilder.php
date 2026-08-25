@@ -16,6 +16,7 @@ final class RuntimeConfigBuilder
 
         $capture = is_array($nodes['capture'] ?? null) ? $nodes['capture'] : [];
         $dns = is_array($nodes['dns'] ?? null) ? $nodes['dns'] : [];
+        $policy = is_array($nodes['policy'] ?? null) ? $nodes['policy'] : [];
         $tun = is_array($nodes['tun'] ?? null) ? $nodes['tun'] : [];
 
         $captureMode = self::stringValue($capture['mode'] ?? 'selected');
@@ -25,6 +26,8 @@ final class RuntimeConfigBuilder
         $dnsListenAddress = self::stringValue($dns['listenAddress'] ?? '127.0.0.1');
         $dnsListenPort = self::intValue($dns['listenPort'] ?? 55353, 55353);
         $fakeIpRange = self::stringValue($dns['fakeIpRange'] ?? self::DEFAULT_FAKEIP_IPV4_RANGE);
+        $policyOutboundMode = self::stringValue($policy['outboundMode'] ?? 'direct_bind');
+        $policyBindAddress = self::stringValue($policy['bindAddress'] ?? '');
         $tunInterface = self::stringValue($tun['interfaceName'] ?? 'tun_singbox');
         $tunAddress = self::stringValue($tun['address'] ?? '172.19.0.1/30');
         $tunStack = self::stringValue($tun['stack'] ?? 'system');
@@ -32,13 +35,18 @@ final class RuntimeConfigBuilder
         if ($fakeIpRange === '') {
             $fakeIpRange = self::DEFAULT_FAKEIP_IPV4_RANGE;
         }
+        if ($policyOutboundMode === '') {
+            $policyOutboundMode = 'direct_bind';
+        }
 
         self::validateStructuredInput(
             $captureMode,
             $captureInterfaces,
             $clients,
             $redirectDomains,
-            $fakeIpRange
+            $fakeIpRange,
+            $policyOutboundMode,
+            $policyBindAddress
         );
 
         $compiledClients = SelectorCompiler::compileClients($clients);
@@ -52,7 +60,9 @@ final class RuntimeConfigBuilder
             $dnsListenPort,
             $fakeIpRange,
             $tunInterface,
-            $tunAddress
+            $tunAddress,
+            $policyOutboundMode,
+            $policyBindAddress
         );
         $policyRequired = $policyPlan['required'] === true;
 
@@ -95,13 +105,16 @@ final class RuntimeConfigBuilder
                 $warnings[] = 'Для policy-маршрутизации необходимо выбрать хотя бы один интерфейс локальной сети.';
             }
 
+            if ($policyBindAddress === '') {
+                $warnings[] = 'Для policy outbound необходимо указать отдельный исходящий IPv4-адрес.';
+            }
+
             if ($dnsRuleReady) {
                 $dnsRule['action'] = 'route';
                 $dnsRule['server'] = 'fakeip-dns';
                 $dnsRules[] = $dnsRule;
             }
 
-            $warnings[] = 'Селекторы доменов уже компилируются в DNS/FakeIP preview, но policy outbound ещё не подключён.';
             $warnings[] = 'Правила перенаправления DNS и FakeIP-трафика на стороне OPNsense ещё не применяются автоматически.';
             $warnings[] = 'Текущий FakeIP preview обрабатывает только A-запросы; IPv6 policy routing будет добавлен отдельно.';
         } elseif ($clients !== [] || $captureInterfaces !== []) {
@@ -118,6 +131,33 @@ final class RuntimeConfigBuilder
         ];
         if ($dnsRules !== []) {
             $dnsConfig['rules'] = $dnsRules;
+        }
+
+        $outbounds = [
+            [
+                'type' => 'direct',
+                'tag' => 'direct',
+            ],
+        ];
+
+        $routeRules = [
+            [
+                'inbound' => 'dns-in',
+                'action' => 'hijack-dns',
+            ],
+        ];
+
+        if ($policyRequired && $policyBindAddress !== '') {
+            $outbounds[] = [
+                'type' => 'direct',
+                'tag' => 'policy-out',
+                'inet4_bind_address' => $policyBindAddress,
+            ];
+            $routeRules[] = [
+                'ip_cidr' => [$fakeIpRange],
+                'action' => 'route',
+                'outbound' => 'policy-out',
+            ];
         }
 
         $config = [
@@ -144,19 +184,9 @@ final class RuntimeConfigBuilder
                     'listen_port' => $dnsListenPort,
                 ],
             ],
-            'outbounds' => [
-                [
-                    'type' => 'direct',
-                    'tag' => 'direct',
-                ],
-            ],
+            'outbounds' => $outbounds,
             'route' => [
-                'rules' => [
-                    [
-                        'inbound' => 'dns-in',
-                        'action' => 'hijack-dns',
-                    ],
-                ],
+                'rules' => $routeRules,
                 'final' => 'direct',
             ],
         ];
@@ -171,6 +201,8 @@ final class RuntimeConfigBuilder
                 'source_ip_cidr' => $compiledClients,
                 'domain' => $compiledDomains['domain'],
                 'domain_suffix' => $compiledDomains['domain_suffix'],
+                'policy_outbound_mode' => $policyOutboundMode,
+                'policy_bind_address' => $policyBindAddress,
             ],
             'policy_plan' => $policyPlan,
             'warnings' => $warnings,
@@ -197,17 +229,23 @@ final class RuntimeConfigBuilder
         array $captureInterfaces,
         array $clients,
         array $redirectDomains,
-        string $fakeIpRange
+        string $fakeIpRange,
+        string $policyOutboundMode,
+        string $policyBindAddress
     ): void {
         if (!in_array($captureMode, ['selected', 'all_lan'], true)) {
             throw new \RuntimeException('MVC-модель содержит неподдерживаемый режим перенаправления.');
+        }
+        if ($policyOutboundMode !== 'direct_bind') {
+            throw new \RuntimeException('MVC-модель содержит неподдерживаемый режим policy outbound.');
         }
 
         $messages = array_merge(
             SelectionValidator::validateCaptureInterfaces($captureInterfaces),
             SelectionValidator::validateClients(implode("\n", $clients)),
             SelectionValidator::validateDomains(implode("\n", $redirectDomains)),
-            SelectionValidator::validateIpv4Network($fakeIpRange)
+            SelectionValidator::validateIpv4Network($fakeIpRange),
+            SelectionValidator::validateIpv4Address($policyBindAddress, true)
         );
 
         if ($messages !== []) {
@@ -233,7 +271,7 @@ final class RuntimeConfigBuilder
             $items = $value;
         } elseif (is_scalar($value) || (is_object($value) && method_exists($value, '__toString'))) {
             $candidate = trim((string)$value);
-            $items = $candidate === '' ? [] : preg_split('/[\s,]+/', $candidate) ?: [];
+            $items = $candidate === '' ? [] : (preg_split('/[\s,]+/', $candidate) ?: []);
         } else {
             return [];
         }
