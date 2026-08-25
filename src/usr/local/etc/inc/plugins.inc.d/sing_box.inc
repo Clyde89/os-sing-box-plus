@@ -19,17 +19,98 @@ function sing_box_is_enabled()
 
 function sing_box_policy_is_managed()
 {
-    return sing_box_is_enabled() && is_file('/var/db/os-sing-box/managed-policy');
+    return is_file('/var/db/os-sing-box/managed-policy')
+        && is_readable('/var/db/os-sing-box/policy-plan.json');
+}
+
+function sing_box_policy_is_active()
+{
+    return sing_box_policy_is_managed() && is_file('/var/db/os-sing-box/policy-active');
+}
+
+function sing_box_load_policy_plan()
+{
+    $path = '/var/db/os-sing-box/policy-plan.json';
+    if (!is_readable($path)) {
+        return null;
+    }
+
+    $content = file_get_contents($path);
+    if (!is_string($content)) {
+        return null;
+    }
+
+    $plan = json_decode($content, true);
+    if (!is_array($plan)) {
+        return null;
+    }
+
+    try {
+        \OPNsense\SingBox\Runtime\PolicyPlanValidator::assertValid($plan);
+    } catch (\Throwable $error) {
+        syslog(LOG_ERR, 'sing-box: сохранённый policy-план не прошёл валидацию');
+        return null;
+    }
+
+    return $plan;
+}
+
+function sing_box_gateway_available($fw, $gateway)
+{
+    if (!is_string($gateway) || $gateway === '' || !method_exists($fw, 'getGateway')) {
+        return false;
+    }
+
+    try {
+        $mapping = $fw->getGateway($gateway);
+    } catch (\Throwable $error) {
+        return false;
+    }
+
+    return is_array($mapping) && !empty($mapping['logic']);
 }
 
 function sing_box_firewall($fw)
 {
-    if (!sing_box_policy_is_managed()) {
+    if (!sing_box_policy_is_active()) {
         return;
     }
 
-    $fw->registerAnchor('sing-box/*', 'rdr');
-    $fw->registerAnchor('sing-box/*', 'fw');
+    $plan = sing_box_load_policy_plan();
+    if ($plan === null) {
+        return;
+    }
+
+    try {
+        $rules = \OPNsense\SingBox\Runtime\FirewallRuleBuilder::build($plan);
+    } catch (\Throwable $error) {
+        syslog(LOG_ERR, 'sing-box: не удалось сформировать правила firewall из policy-плана');
+        return;
+    }
+
+    foreach ($rules['destination_nat'] ?? [] as $rule) {
+        $priority = (int)($rule['#priority'] ?? 2);
+        unset($rule['#priority'], $rule['#operation']);
+        $fw->registerDestinationNatRule($priority, $rule);
+    }
+
+    foreach ($rules['filter'] ?? [] as $rule) {
+        $priority = (int)($rule['#priority'] ?? 3);
+        unset($rule['#priority'], $rule['#operation']);
+
+        if (!empty($rule['gateway']) && !sing_box_gateway_available($fw, $rule['gateway'])) {
+            syslog(
+                LOG_WARNING,
+                sprintf(
+                    'sing-box: gateway %s недоступен; policy route пропущен, fail-closed правило сохранено',
+                    $rule['gateway']
+                )
+            );
+            continue;
+        }
+
+        $fw->registerFilterRule($priority, $rule);
+    }
 }
 
 function sing_box_services()
