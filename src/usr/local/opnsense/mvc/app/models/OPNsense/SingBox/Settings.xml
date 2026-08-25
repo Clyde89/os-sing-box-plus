@@ -12,7 +12,7 @@
                     <all_lan>Весь локальный трафик</all_lan>
                 </OptionValues>
             </mode>
-            <clients type="TextField"/>
+            <clients type=".\ClientListField"/>
         </capture>
         <dns>
             <listenAddress type="NetworkField">
@@ -25,7 +25,7 @@
                 <Default>55353</Default>
                 <Required>Y</Required>
             </listenPort>
-            <redirectDomains type="TextField"/>
+            <redirectDomains type=".\DomainListField"/>
         </dns>
         <tun>
             <interfaceName type="TextField">
