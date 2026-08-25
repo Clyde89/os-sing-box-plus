@@ -12,6 +12,12 @@
                     <all_lan>Весь локальный трафик</all_lan>
                 </OptionValues>
             </mode>
+            <interfaces type=".\CaptureInterfaceField">
+                <Multiple>Y</Multiple>
+                <filters>
+                    <enable>/^(?!0).*$/</enable>
+                </filters>
+            </interfaces>
             <clients type=".\ClientListField"/>
         </capture>
         <dns>
