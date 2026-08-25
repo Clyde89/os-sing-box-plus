@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php';
 require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php';
 require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php';
 
@@ -27,6 +28,7 @@ $basePlan = RuntimeConfigBuilder::build([
         'listenAddress' => '127.0.0.1',
         'listenPort' => '55353',
         'redirectDomains' => '',
+        'fakeIpRange' => '198.18.0.0/15',
     ],
     'tun' => [
         'interfaceName' => 'tun_singbox',
@@ -43,6 +45,7 @@ assertSameValue('127.0.0.1', $basePlan['config']['inbounds'][1]['listen'], 'Ад
 assertSameValue(55353, $basePlan['config']['inbounds'][1]['listen_port'], 'Порт DNS-listener');
 assertSameValue('hijack-dns', $basePlan['config']['route']['rules'][0]['action'], 'DNS hijack action');
 assertSameValue([], $basePlan['selectors']['source_ip_cidr'], 'Базовый план не должен содержать скомпилированные адреса клиентов');
+assertSameValue('198.18.0.0/15', $basePlan['policy_plan']['fakeip_ipv4_range'], 'Базовый диапазон FakeIP');
 
 $encoded = RuntimeConfigBuilder::encodeConfig($basePlan);
 $decoded = json_decode($encoded, true);
@@ -59,6 +62,7 @@ $selectionPlan = RuntimeConfigBuilder::build([
         'listenAddress' => '127.0.0.1',
         'listenPort' => 55353,
         'redirectDomains' => "Example.org.\n*.Sub.Example.org.\n",
+        'fakeIpRange' => '198.20.0.0/16',
     ],
     'tun' => [
         'interfaceName' => 'tun_test',
@@ -80,7 +84,7 @@ assertSameValue(
 );
 assertSameValue(['example.org'], $selectionPlan['selectors']['domain'], 'Компиляция точных доменов');
 assertSameValue(['.sub.example.org'], $selectionPlan['selectors']['domain_suffix'], 'Компиляция wildcard-доменов');
-assertSameValue('198.18.0.0/15', $selectionPlan['policy_plan']['fakeip_ipv4_range'], 'Диапазон FakeIP IPv4');
+assertSameValue('198.20.0.0/16', $selectionPlan['policy_plan']['fakeip_ipv4_range'], 'Пользовательский диапазон FakeIP IPv4');
 assertSameValue(['A'], $selectionPlan['policy_plan']['dns_query_types'], 'Типы DNS-запросов FakeIP preview');
 assertSameValue(true, $selectionPlan['policy_plan']['requires_opnsense_dns_redirect'], 'Требование DNS redirect OPNsense');
 assertSameValue(true, $selectionPlan['policy_plan']['requires_opnsense_fakeip_route'], 'Требование FakeIP route OPNsense');
@@ -92,7 +96,7 @@ if (!is_array($fakeipServer)) {
 }
 assertSameValue('fakeip', $fakeipServer['type'] ?? null, 'Тип FakeIP DNS server');
 assertSameValue('fakeip-dns', $fakeipServer['tag'] ?? null, 'Тег FakeIP DNS server');
-assertSameValue('198.18.0.0/15', $fakeipServer['inet4_range'] ?? null, 'Диапазон FakeIP server');
+assertSameValue('198.20.0.0/16', $fakeipServer['inet4_range'] ?? null, 'Пользовательский диапазон FakeIP server');
 
 $dnsRule = $selectionPlan['config']['dns']['rules'][0] ?? null;
 if (!is_array($dnsRule)) {
@@ -135,6 +139,20 @@ if (!is_array($allLanDnsRule)) {
 }
 if (array_key_exists('source_ip_cidr', $allLanDnsRule)) {
     failTest('Режим all_lan не должен добавлять source_ip_cidr в DNS/FakeIP правило.');
+}
+
+$invalidRangeRejected = false;
+try {
+    RuntimeConfigBuilder::build([
+        'capture' => ['mode' => 'selected'],
+        'dns' => ['fakeIpRange' => '198.18.0.1/15'],
+        'tun' => [],
+    ]);
+} catch (RuntimeException $error) {
+    $invalidRangeRejected = true;
+}
+if (!$invalidRangeRejected) {
+    failTest('Runtime builder должен отклонять FakeIP-сеть с host-битами.');
 }
 
 $wrappedPlan = RuntimeConfigBuilder::build([
