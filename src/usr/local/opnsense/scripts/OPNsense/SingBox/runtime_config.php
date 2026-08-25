@@ -5,9 +5,11 @@ require_once('config.inc');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php');
+require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanValidator.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php');
 
+use OPNsense\SingBox\Runtime\PolicyPlanValidator;
 use OPNsense\SingBox\Runtime\RuntimeConfigBuilder;
 use OPNsense\SingBox\Settings;
 
@@ -16,6 +18,10 @@ const SING_BOX_BINARY = '/usr/local/bin/sing-box';
 const STATE_DIRECTORY = '/var/db/os-sing-box';
 const SETUP_REQUIRED_FILE = STATE_DIRECTORY . '/setup-required';
 const MANAGED_CONFIG_FILE = STATE_DIRECTORY . '/managed-config';
+const MANAGED_POLICY_FILE = STATE_DIRECTORY . '/managed-policy';
+const POLICY_PLAN_FILE = STATE_DIRECTORY . '/policy-plan.json';
+const POLICY_RELOAD_PENDING_FILE = STATE_DIRECTORY . '/filter-reload.pending';
+const TUN_INTERFACE_FILE = STATE_DIRECTORY . '/tun-interface';
 
 final class RuntimeApplyException extends RuntimeException
 {
@@ -47,6 +53,123 @@ function validateRuntimeConfig(string $path): void
     }
 }
 
+function ensureStateDirectory(): void
+{
+    if (!is_dir(STATE_DIRECTORY) && !@mkdir(STATE_DIRECTORY, 0700, true)) {
+        raiseRuntime('Не удалось создать каталог состояния управляемой конфигурации.', 73);
+    }
+    if (!@chmod(STATE_DIRECTORY, 0700)) {
+        raiseRuntime('Не удалось подтвердить безопасные права каталога состояния.', 73);
+    }
+}
+
+function writeStateFile(string $path, string $content): void
+{
+    ensureStateDirectory();
+    $temporary = tempnam(STATE_DIRECTORY, '.singbox_state_');
+    if ($temporary === false) {
+        raiseRuntime('Не удалось создать временный файл состояния.', 73);
+    }
+
+    try {
+        if (file_put_contents($temporary, $content, LOCK_EX) === false) {
+            raiseRuntime('Не удалось записать файл состояния.', 74);
+        }
+        if (!@chmod($temporary, 0600)) {
+            raiseRuntime('Не удалось установить безопасные права файла состояния.', 74);
+        }
+        if (!@rename($temporary, $path)) {
+            raiseRuntime('Не удалось атомарно заменить файл состояния.', 74);
+        }
+        $temporary = '';
+    } finally {
+        if ($temporary !== '') {
+            @unlink($temporary);
+        }
+    }
+}
+
+function snapshotStateFile(string $path): array
+{
+    if (!is_file($path)) {
+        return ['exists' => false, 'content' => ''];
+    }
+
+    $content = file_get_contents($path);
+    if (!is_string($content)) {
+        raiseRuntime('Не удалось прочитать существующий файл состояния перед применением.', 74);
+    }
+
+    return ['exists' => true, 'content' => $content];
+}
+
+function restoreStateFile(string $path, array $snapshot): void
+{
+    if (($snapshot['exists'] ?? false) === true) {
+        writeStateFile($path, (string)($snapshot['content'] ?? ''));
+    } else {
+        @unlink($path);
+    }
+}
+
+function capturePolicyState(): array
+{
+    return [
+        POLICY_PLAN_FILE => snapshotStateFile(POLICY_PLAN_FILE),
+        MANAGED_POLICY_FILE => snapshotStateFile(MANAGED_POLICY_FILE),
+        POLICY_RELOAD_PENDING_FILE => snapshotStateFile(POLICY_RELOAD_PENDING_FILE),
+        TUN_INTERFACE_FILE => snapshotStateFile(TUN_INTERFACE_FILE),
+    ];
+}
+
+function restorePolicyState(array $snapshot): void
+{
+    foreach ($snapshot as $path => $fileSnapshot) {
+        restoreStateFile($path, $fileSnapshot);
+    }
+}
+
+function applyPolicyState(array $runtimePlan): string
+{
+    $policyPlan = $runtimePlan['policy_plan'] ?? null;
+    if (!is_array($policyPlan)) {
+        raiseRuntime('Runtime-план не содержит декларативный policy-план.', 65);
+    }
+
+    PolicyPlanValidator::assertValid($policyPlan);
+    $tunInterface = (string)($policyPlan['tun_interface'] ?? '');
+    if ($tunInterface === '' || preg_match('/^[A-Za-z0-9_.-]{1,15}$/', $tunInterface) !== 1) {
+        raiseRuntime('Policy-план содержит некорректное имя TUN-интерфейса.', 65);
+    }
+
+    writeStateFile(TUN_INTERFACE_FILE, $tunInterface . PHP_EOL);
+
+    if (($policyPlan['required'] ?? false) === true) {
+        if (($policyPlan['ready'] ?? false) !== true || ($policyPlan['confirmation_required'] ?? false) === true) {
+            raiseRuntime('Policy-план не готов к безопасной активации.', 65);
+        }
+
+        $json = json_encode(
+            $policyPlan,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        );
+        if ($json === false) {
+            raiseRuntime('Не удалось сериализовать policy-план для OPNsense.', 70);
+        }
+        $json .= PHP_EOL;
+
+        writeStateFile(POLICY_PLAN_FILE, $json);
+        writeStateFile(MANAGED_POLICY_FILE, "managed\n");
+        writeStateFile(POLICY_RELOAD_PENDING_FILE, "pending\n");
+        return hash('sha256', $json);
+    }
+
+    @unlink(POLICY_PLAN_FILE);
+    @unlink(MANAGED_POLICY_FILE);
+    writeStateFile(POLICY_RELOAD_PENDING_FILE, "pending\n");
+    return hash('sha256', '');
+}
+
 function restorePreviousConfig(string $backupFile, bool $hadPreviousConfig): void
 {
     if ($hadPreviousConfig && is_file($backupFile)) {
@@ -64,25 +187,14 @@ function ensureManagedState(): bool
         return false;
     }
 
-    if (!is_dir(STATE_DIRECTORY) && !@mkdir(STATE_DIRECTORY, 0700, true)) {
-        raiseRuntime('Не удалось создать каталог состояния управляемой конфигурации.', 73);
-    }
-    if (!@chmod(STATE_DIRECTORY, 0700)) {
-        raiseRuntime('Не удалось подтвердить безопасные права каталога состояния.', 73);
-    }
-    if (@file_put_contents(MANAGED_CONFIG_FILE, "managed\n", LOCK_EX) === false) {
-        raiseRuntime('Не удалось зафиксировать управление runtime-конфигурацией через MVC.', 74);
-    }
-    if (!@chmod(MANAGED_CONFIG_FILE, 0600)) {
-        @unlink(MANAGED_CONFIG_FILE);
-        raiseRuntime('Не удалось установить безопасные права признака управляемой конфигурации.', 74);
-    }
-
+    writeStateFile(MANAGED_CONFIG_FILE, "managed\n");
     return true;
 }
 
 $tempFile = '';
 $managedMarkerCreated = false;
+$policySnapshot = [];
+$policyStateChanged = false;
 
 try {
     if ($argc !== 2 || $argv[1] !== 'apply') {
@@ -149,6 +261,8 @@ try {
         }
     }
 
+    $policySnapshot = capturePolicyState();
+
     if (!@rename($tempFile, TARGET_CONFIG)) {
         raiseRuntime('Не удалось атомарно заменить runtime-конфигурацию.', 74);
     }
@@ -160,9 +274,12 @@ try {
     }
 
     try {
+        $policySha256 = applyPolicyState($plan);
+        $policyStateChanged = true;
         $managedMarkerCreated = ensureManagedState();
-    } catch (RuntimeApplyException $error) {
+    } catch (Throwable $error) {
         restorePreviousConfig($backupFile, $hadPreviousConfig);
+        restorePolicyState($policySnapshot);
         throw $error;
     }
 
@@ -172,14 +289,25 @@ try {
             $managedMarkerCreated = false;
         }
         restorePreviousConfig($backupFile, $hadPreviousConfig);
+        restorePolicyState($policySnapshot);
+        $policyStateChanged = false;
         raiseRuntime('Не удалось завершить первоначальную настройку; предыдущее состояние восстановлено.', 74);
     }
 
-    echo 'OK Runtime-конфигурация sing-box применена. SHA256=' . hash('sha256', $config) . PHP_EOL;
+    echo 'OK Runtime-конфигурация sing-box применена. SHA256=' . hash('sha256', $config)
+        . ' POLICY_SHA256=' . $policySha256
+        . ' RESTART_REQUIRED=YES' . PHP_EOL;
     exit(0);
 } catch (RuntimeApplyException $error) {
     if ($tempFile !== '') {
         @unlink($tempFile);
+    }
+    if ($policyStateChanged && $policySnapshot !== []) {
+        try {
+            restorePolicyState($policySnapshot);
+        } catch (Throwable $restoreError) {
+            // Основная ошибка применения важнее вторичной ошибки восстановления состояния.
+        }
     }
     fwrite(STDERR, 'ERROR ' . $error->getMessage() . PHP_EOL);
     $code = $error->getCode();
@@ -187,6 +315,13 @@ try {
 } catch (Throwable $error) {
     if ($tempFile !== '') {
         @unlink($tempFile);
+    }
+    if ($policyStateChanged && $policySnapshot !== []) {
+        try {
+            restorePolicyState($policySnapshot);
+        } catch (Throwable $restoreError) {
+            // Основная ошибка применения важнее вторичной ошибки восстановления состояния.
+        }
     }
     fwrite(STDERR, 'ERROR Неожиданная ошибка применения runtime-конфигурации.' . PHP_EOL);
     exit(70);
