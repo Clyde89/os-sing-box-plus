@@ -17,6 +17,21 @@ function sing_box_is_enabled()
         && preg_match('/^\s*sing_box_enable\s*=\s*"YES"\s*$/m', $content) === 1;
 }
 
+function sing_box_policy_is_managed()
+{
+    return sing_box_is_enabled() && is_file('/var/db/os-sing-box/managed-policy');
+}
+
+function sing_box_firewall($fw)
+{
+    if (!sing_box_policy_is_managed()) {
+        return;
+    }
+
+    $fw->registerAnchor('sing-box/*', 'rdr');
+    $fw->registerAnchor('sing-box/*', 'fw');
+}
+
 function sing_box_services()
 {
     return [
