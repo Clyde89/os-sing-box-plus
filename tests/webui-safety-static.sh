@@ -12,19 +12,22 @@ grep -q '^function finishInitialSetup()' "$WEBUI"
 grep -q '^function configdAction(' "$WEBUI"
 grep -q '^function serviceEnabled()' "$WEBUI"
 grep -q '^function serviceEnableAction(' "$WEBUI"
+grep -q '^function clearLog()' "$WEBUI"
 grep -Fq 'chmod($backupFile, 0600)' "$WEBUI"
 grep -Fq '@unlink($backupFile)' "$WEBUI"
 grep -Fq "(\$action === 'start' || \$action === 'restart') && setupRequired()" "$WEBUI"
-grep -Fq "(\$action === 'start' || \$action === 'restart') && !serviceEnabled()" "$WEBUI"
 grep -Fq "'enabled' => serviceEnabled()" "$WEBUI"
 grep -Fq "'setup_required' => setupRequired()" "$WEBUI"
+grep -Fq "configdAction('clearlog')" "$WEBUI"
 grep -q "case 'enable_service':" "$WEBUI"
 grep -q "case 'disable_service':" "$WEBUI"
 grep -q 'Требуется первоначальная настройка' "$WEBUI"
 grep -q 'Включить автозапуск' "$WEBUI"
 grep -q 'Отключить автозапуск' "$WEBUI"
-grep -Fq '($setupRequired || $serviceEnabled)' "$WEBUI"
-grep -Fq '($setupRequired || !$serviceEnabled)' "$WEBUI"
+grep -Fq '($setupRequired || $serviceEnabled !== false)' "$WEBUI"
+grep -Fq '($setupRequired || $serviceEnabled !== true)' "$WEBUI"
+grep -Fq '$serviceEnabled !== true' "$WEBUI"
+grep -q "return 'error';" "$WEBUI"
 grep -q 'configctl' "$WEBUI"
 
 if grep -q '/usr/sbin/service sing-box' "$WEBUI"; then
@@ -34,6 +37,11 @@ fi
 
 if grep -q '/etc/rc.conf.d/sing_box' "$WEBUI"; then
     echo "WebUI не должен напрямую изменять rc.conf.d" >&2
+    exit 1
+fi
+
+if grep -q "const SINGBOX_LOG_FILE" "$WEBUI"; then
+    echo "WebUI не должен напрямую управлять файлом журнала" >&2
     exit 1
 fi
 
