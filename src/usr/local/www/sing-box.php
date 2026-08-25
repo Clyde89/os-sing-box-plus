@@ -41,6 +41,7 @@ const SINGBOX_CONFIG_FILE = '/usr/local/etc/sing-box/config.json';
 const SINGBOX_BINARY = '/usr/local/bin/sing-box';
 const CONFIGCTL_BINARY = '/usr/local/sbin/configctl';
 const SINGBOX_LOG_FILE = '/var/log/sing-box/sing-box.log';
+const SETUP_REQUIRED_FILE = '/var/db/os-sing-box/setup-required';
 const STATUS_ENDPOINT = '/sing-box.php?ajax=status';
 const LOGS_ENDPOINT = '/sing-box_log.php';
 const CSRF_TOKEN_KEY = 'sing_box_service_csrf_token';
@@ -78,6 +79,20 @@ function runCommand($command)
     $status = 0;
     exec($command . ' 2>&1', $output, $status);
     return [$output, $status];
+}
+
+function setupRequired()
+{
+    return is_file(SETUP_REQUIRED_FILE);
+}
+
+function finishInitialSetup()
+{
+    if (!setupRequired()) {
+        return true;
+    }
+
+    return @unlink(SETUP_REQUIRED_FILE);
 }
 
 function readConfig()
@@ -143,14 +158,25 @@ function saveConfig($content)
             return [false, 'Не удалось записать временный файл конфигурации.'];
         }
 
-        @chmod($tempFile, 0600);
+        if (!@chmod($tempFile, 0600)) {
+            return [false, 'Не удалось установить безопасные права на временный файл конфигурации.'];
+        }
+
         [$valid, $validationMessage] = validateSingBoxConfig($tempFile);
         if (!$valid) {
             return [false, 'Конфигурация не прошла проверку sing-box: ' . $validationMessage];
         }
 
-        if (is_file(SINGBOX_CONFIG_FILE) && !@copy(SINGBOX_CONFIG_FILE, SINGBOX_CONFIG_FILE . '.bak')) {
-            return [false, 'Не удалось создать резервную копию текущей конфигурации.'];
+        $backupFile = SINGBOX_CONFIG_FILE . '.bak';
+        if (is_file(SINGBOX_CONFIG_FILE)) {
+            if (!@copy(SINGBOX_CONFIG_FILE, $backupFile)) {
+                return [false, 'Не удалось создать резервную копию текущей конфигурации.'];
+            }
+
+            if (!@chmod($backupFile, 0600)) {
+                @unlink($backupFile);
+                return [false, 'Не удалось установить безопасные права на резервную копию конфигурации.'];
+            }
         }
 
         if (!@rename($tempFile, SINGBOX_CONFIG_FILE)) {
@@ -158,7 +184,14 @@ function saveConfig($content)
         }
 
         $tempFile = '';
-        @chmod(SINGBOX_CONFIG_FILE, 0600);
+        if (!@chmod(SINGBOX_CONFIG_FILE, 0600)) {
+            return [false, 'Конфигурация сохранена, но не удалось подтвердить безопасные права файла.'];
+        }
+
+        if (!finishInitialSetup()) {
+            return [false, 'Конфигурация сохранена, но не удалось завершить первоначальную настройку.'];
+        }
+
         return [true, 'Конфигурация проверена и сохранена.'];
     } finally {
         if ($tempFile !== '') {
@@ -177,6 +210,10 @@ function serviceAction($action)
 
     if (!isset($messages[$action])) {
         return [false, 'Недопустимое действие.'];
+    }
+
+    if (($action === 'start' || $action === 'restart') && setupRequired()) {
+        return [false, 'Первоначальная настройка sing-box не завершена. Сохраните проверенную конфигурацию перед запуском службы.'];
     }
 
     if (!is_executable(CONFIGCTL_BINARY)) {
@@ -223,7 +260,13 @@ generateCsrfToken();
 
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'status') {
     header('Content-Type: application/json; charset=UTF-8');
-    echo json_encode(['status' => serviceStatus()], JSON_UNESCAPED_UNICODE);
+    echo json_encode(
+        [
+            'status' => serviceStatus(),
+            'setup_required' => setupRequired(),
+        ],
+        JSON_UNESCAPED_UNICODE
+    );
     exit;
 }
 
@@ -259,6 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $configContent = readConfig();
 $csrfToken = getCsrfToken();
+$setupRequired = setupRequired();
 
 if ($configContent === '' && !is_file(SINGBOX_CONFIG_FILE) && $message === '') {
     $message = 'Рабочая конфигурация отсутствует. Сохраните конфигурацию перед запуском службы.';
@@ -325,6 +369,15 @@ include("fbegin.inc");
                 </div>
             <?php endif; ?>
 
+            <?php if ($setupRequired): ?>
+                <div class="col-xs-12">
+                    <div class="alert alert-warning">
+                        <strong>Требуется первоначальная настройка.</strong>
+                        Проверьте параметры конфигурации и сохраните её. До завершения настройки запуск и перезапуск sing-box заблокированы.
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <section class="col-xs-12">
                 <div class="content-box">
                     <div class="singbox-title"><i class="fa fa-heartbeat text-muted"></i> Состояние службы</div>
@@ -344,9 +397,9 @@ include("fbegin.inc");
                     <div class="singbox-body">
                         <form method="post" class="form-inline singbox-toolbar">
                             <input type="hidden" name="csrf_token" value="<?= h($csrfToken); ?>">
-                            <button type="submit" name="action" value="start" class="btn btn-success"><i class="fa fa-play"></i> Запустить</button>
+                            <button type="submit" name="action" value="start" class="btn btn-success"<?= $setupRequired ? ' disabled' : ''; ?>><i class="fa fa-play"></i> Запустить</button>
                             <button type="submit" name="action" value="stop" class="btn btn-danger"><i class="fa fa-stop"></i> Остановить</button>
-                            <button type="submit" name="action" value="restart" class="btn btn-warning"><i class="fa fa-refresh"></i> Перезапустить</button>
+                            <button type="submit" name="action" value="restart" class="btn btn-warning"<?= $setupRequired ? ' disabled' : ''; ?>><i class="fa fa-refresh"></i> Перезапустить</button>
                         </form>
                     </div>
                 </div>
@@ -359,7 +412,7 @@ include("fbegin.inc");
                         <form method="post">
                             <input type="hidden" name="csrf_token" value="<?= h($csrfToken); ?>">
                             <textarea id="config_content" name="config_content" rows="16" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" class="form-control singbox-editor"><?= h($configContent); ?></textarea>
-                            <p class="singbox-help">Перед сохранением проверяются синтаксис JSON и команда <code>sing-box check</code>. Текущая конфигурация сохраняется в резервную копию.</p>
+                            <p class="singbox-help">Перед сохранением проверяются синтаксис JSON и команда <code>sing-box check</code>. Текущая конфигурация сохраняется в резервную копию с правами <code>0600</code>.</p>
                             <br>
                             <button type="submit" name="action" value="save_config" class="btn btn-primary"><i class="fa fa-save"></i> Проверить и сохранить</button>
                         </form>
@@ -388,7 +441,7 @@ include("fbegin.inc");
     const STATUS_ENDPOINT = <?= json_encode(STATUS_ENDPOINT, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
     const LOGS_ENDPOINT = <?= json_encode(LOGS_ENDPOINT, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
 
-    function setStatus(state) {
+    function setStatus(state, setupRequired) {
         const element = document.getElementById('sing-box-status');
         const states = {
             running: {
@@ -408,13 +461,18 @@ include("fbegin.inc");
         const next = states[state] || states.error;
         element.className = next.className;
         element.innerHTML = next.html;
+
+        if (setupRequired) {
+            element.className = 'alert alert-warning singbox-status';
+            element.innerHTML = '<i class="fa fa-wrench text-warning"></i> <span class="singbox-status-title">Требуется настройка</span><span>Служба не будет запущена до сохранения проверенной конфигурации</span>';
+        }
     }
 
     function refreshStatus() {
         fetch(STATUS_ENDPOINT, {cache: 'no-store'})
             .then(response => response.json())
-            .then(data => setStatus(data.status))
-            .catch(() => setStatus('error'));
+            .then(data => setStatus(data.status, data.setup_required === true))
+            .catch(() => setStatus('error', false));
     }
 
     function refreshLogs() {
