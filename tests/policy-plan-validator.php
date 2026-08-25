@@ -37,7 +37,8 @@ $plan = PolicyPlanBuilder::build(
     'tun_singbox',
     '172.19.0.1/30',
     'direct_bind',
-    '192.0.2.70'
+    '192.0.2.70',
+    'VPN_GW'
 );
 
 assertPolicyValid($plan, 'Корректный selected policy-план');
@@ -78,9 +79,48 @@ $duplicateId = $plan;
 $duplicateId['operations'][1]['id'] = $duplicateId['operations'][0]['id'];
 assertPolicyInvalid($duplicateId, 'Повторяющийся ID операции');
 
-$invalidRoute = $plan;
-$invalidRoute['operations'][2]['network'] = '2001:db8::/64';
-assertPolicyInvalid($invalidRoute, 'IPv6 в текущем IPv4 FakeIP route');
+$invalidRouteSource = $plan;
+$invalidRouteSource['operations'][2]['source_address'] = '2001:db8::70';
+assertPolicyInvalid($invalidRouteSource, 'IPv6 в исходящем адресе policy route');
+
+$invalidGateway = $plan;
+$invalidGateway['operations'][2]['gateway'] = 'VPN GW';
+assertPolicyInvalid($invalidGateway, 'Некорректное имя gateway policy route');
+
+$invalidBlockSource = $plan;
+$invalidBlockSource['operations'][3]['source_address'] = '2001:db8::70';
+assertPolicyInvalid($invalidBlockSource, 'IPv6 в исходящем адресе fail-closed');
+
+$missingBlock = $plan;
+array_pop($missingBlock['operations']);
+assertPolicyInvalid($missingBlock, 'Policy route без fail-closed');
+
+$missingRoute = $plan;
+array_splice($missingRoute['operations'], 2, 1);
+assertPolicyInvalid($missingRoute, 'Fail-closed без policy route');
+
+$mismatchedSources = $plan;
+$mismatchedSources['operations'][3]['source_address'] = '192.0.2.71';
+assertPolicyInvalid($mismatchedSources, 'Разные исходящие адреса policy route и fail-closed');
+
+$reversedPair = $plan;
+[$reversedPair['operations'][2], $reversedPair['operations'][3]] = [
+    $reversedPair['operations'][3],
+    $reversedPair['operations'][2],
+];
+assertPolicyInvalid($reversedPair, 'Fail-closed перед policy route');
+
+$disabledFailClosed = $plan;
+$disabledFailClosed['policy_outbound']['fail_closed'] = false;
+assertPolicyInvalid($disabledFailClosed, 'Отключённый fail-closed');
+
+$mismatchedBindAddress = $plan;
+$mismatchedBindAddress['policy_outbound']['bind_address'] = '192.0.2.71';
+assertPolicyInvalid($mismatchedBindAddress, 'Bind address не согласован с policy route');
+
+$mismatchedGateway = $plan;
+$mismatchedGateway['policy_outbound']['gateway'] = 'OTHER_GW';
+assertPolicyInvalid($mismatchedGateway, 'Gateway не согласован с policy route');
 
 $allLanPlan = PolicyPlanBuilder::build(
     'all_lan',
@@ -93,9 +133,18 @@ $allLanPlan = PolicyPlanBuilder::build(
     'tun_singbox',
     '172.19.0.1/30',
     'direct_bind',
-    '192.0.2.70'
+    '192.0.2.70',
+    'VPN_GW'
 );
 assertPolicyValid($allLanPlan, 'Корректный all_lan policy-план без source selector');
+
+$allLanWithoutConfirmation = $allLanPlan;
+$allLanWithoutConfirmation['confirmation_required'] = false;
+assertPolicyInvalid($allLanWithoutConfirmation, 'All_lan без обязательного подтверждения');
+
+$allLanWithSource = $allLanPlan;
+$allLanWithSource['operations'][0]['source_ip_cidr'] = ['192.0.2.10/32'];
+assertPolicyInvalid($allLanWithSource, 'All_lan DNS redirect с source selector');
 
 if (!preg_match('/^[a-f0-9]{64}$/', $checksumA)) {
     failPolicyValidation('Policy checksum должен быть SHA-256 в hex-формате.');

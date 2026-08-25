@@ -23,6 +23,39 @@ final class PolicyPlanValidator
             $errors[] = 'Policy-план содержит неподдерживаемый режим захвата.';
         }
 
+        $required = $plan['required'] ?? null;
+        if (!is_bool($required)) {
+            $errors[] = 'Policy-план содержит некорректный признак необходимости правил.';
+        }
+
+        $ready = $plan['ready'] ?? null;
+        if (!is_bool($ready)) {
+            $errors[] = 'Policy-план содержит некорректный признак готовности.';
+        }
+
+        $confirmationRequired = $plan['confirmation_required'] ?? null;
+        $expectedConfirmation = $required === true && $captureMode === 'all_lan';
+        if (!is_bool($confirmationRequired) || $confirmationRequired !== $expectedConfirmation) {
+            $errors[] = 'Policy-план содержит некорректный признак подтверждения all_lan.';
+        }
+
+        $policyOutbound = $plan['policy_outbound'] ?? null;
+        $policyOutboundReady = null;
+        if (!is_array($policyOutbound)) {
+            $errors[] = 'Policy-план не содержит корректное описание policy outbound.';
+        } else {
+            $policyOutboundReady = $policyOutbound['ready'] ?? null;
+            if (!is_bool($policyOutboundReady)) {
+                $errors[] = 'Policy outbound содержит некорректный признак готовности.';
+            }
+            if (($policyOutbound['required'] ?? null) !== $required) {
+                $errors[] = 'Признак необходимости policy outbound не согласован с policy-планом.';
+            }
+            if ($required === true && ($policyOutbound['fail_closed'] ?? null) !== true) {
+                $errors[] = 'Обязательный policy outbound должен использовать fail-closed.';
+            }
+        }
+
         $interfaces = is_array($plan['capture_interfaces'] ?? null) ? $plan['capture_interfaces'] : [];
         foreach ($interfaces as $interface) {
             if (!self::isSafeInterface($interface)) {
@@ -41,7 +74,9 @@ final class PolicyPlanValidator
         }
 
         $operationIds = [];
-        foreach ($operations as $operation) {
+        $policyRoutes = [];
+        $policyBlocks = [];
+        foreach ($operations as $operationIndex => $operation) {
             if (!is_array($operation)) {
                 $errors[] = 'Policy-план содержит операцию неподдерживаемого формата.';
                 continue;
@@ -61,11 +96,30 @@ final class PolicyPlanValidator
                 self::validateDnsRedirect($operation, $captureMode, $errors);
             } elseif ($type === 'policy_route') {
                 self::validatePolicyRoute($operation, $errors);
+                $policyRoutes[] = ['index' => $operationIndex, 'operation' => $operation];
             } elseif ($type === 'policy_block') {
                 self::validatePolicyBlock($operation, $errors);
+                $policyBlocks[] = ['index' => $operationIndex, 'operation' => $operation];
             } else {
                 $errors[] = 'Policy-план содержит неподдерживаемый тип операции.';
             }
+        }
+
+        self::validateFailClosedPair(
+            $required,
+            $policyOutbound,
+            $policyOutboundReady,
+            $policyRoutes,
+            $policyBlocks,
+            $errors
+        );
+
+        if ($required === false && $operations !== []) {
+            $errors[] = 'Policy-план без правил не должен содержать операции firewall.';
+        }
+
+        if ($required === true && $ready === true && $policyOutboundReady !== true) {
+            $errors[] = 'Готовый policy-план не может содержать неготовый policy outbound.';
         }
 
         return array_values(array_unique($errors));
@@ -121,6 +175,8 @@ final class PolicyPlanValidator
             $errors[] = 'DNS redirect содержит некорректный source selector.';
         } elseif ($captureMode === 'selected' && $sources === []) {
             $errors[] = 'DNS redirect selected mode не может применяться без source selector.';
+        } elseif ($captureMode === 'all_lan' && $sources !== []) {
+            $errors[] = 'DNS redirect all_lan не должен содержать source selector.';
         } else {
             foreach ($sources as $source) {
                 if (!is_string($source) || !self::isIpv4AddressOrNetwork($source)) {
@@ -149,6 +205,63 @@ final class PolicyPlanValidator
         $sourceAddress = $operation['source_address'] ?? null;
         if (!is_string($sourceAddress) || filter_var($sourceAddress, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
             $errors[] = 'Fail-closed правило содержит некорректный исходящий IPv4-адрес.';
+        }
+    }
+
+    private static function validateFailClosedPair(
+        $required,
+        $policyOutbound,
+        $policyOutboundReady,
+        array $policyRoutes,
+        array $policyBlocks,
+        array &$errors
+    ): void {
+        if (count($policyRoutes) > 1) {
+            $errors[] = 'Policy-план содержит несколько операций policy route.';
+        }
+        if (count($policyBlocks) > 1) {
+            $errors[] = 'Policy-план содержит несколько операций fail-closed.';
+        }
+
+        $hasRoute = count($policyRoutes) === 1;
+        $hasBlock = count($policyBlocks) === 1;
+        if ($hasRoute !== $hasBlock) {
+            $errors[] = 'Policy route и fail-closed должны присутствовать только парой.';
+            return;
+        }
+
+        if ($required === true && $policyOutboundReady === true && (!$hasRoute || !$hasBlock)) {
+            $errors[] = 'Готовый policy outbound должен содержать policy route и fail-closed.';
+            return;
+        }
+
+        if (!$hasRoute || !$hasBlock) {
+            return;
+        }
+
+        if ($policyOutboundReady !== true) {
+            $errors[] = 'Операции policy route и fail-closed не должны формироваться для неготового policy outbound.';
+        }
+
+        $route = $policyRoutes[0];
+        $block = $policyBlocks[0];
+        $routeSource = $route['operation']['source_address'] ?? null;
+        $blockSource = $block['operation']['source_address'] ?? null;
+        if ($routeSource !== $blockSource) {
+            $errors[] = 'Policy route и fail-closed должны использовать один исходящий IPv4-адрес.';
+        }
+        if ($route['index'] >= $block['index']) {
+            $errors[] = 'Fail-closed правило должно следовать после policy route.';
+        }
+
+        if (!is_array($policyOutbound)) {
+            return;
+        }
+        if (($policyOutbound['bind_address'] ?? null) !== $routeSource) {
+            $errors[] = 'Исходящий адрес policy route не согласован с policy outbound.';
+        }
+        if (($policyOutbound['gateway'] ?? null) !== ($route['operation']['gateway'] ?? null)) {
+            $errors[] = 'Gateway операции policy route не согласован с policy outbound.';
         }
     }
 
