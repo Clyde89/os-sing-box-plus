@@ -3,6 +3,7 @@
 namespace OPNsense\SingBox\Api;
 
 use OPNsense\Base\ApiMutableModelControllerBase;
+use OPNsense\Core\Backend;
 use OPNsense\SingBox\Runtime\RuntimeConfigBuilder;
 
 class SettingsController extends ApiMutableModelControllerBase
@@ -35,6 +36,36 @@ class SettingsController extends ApiMutableModelControllerBase
             return [
                 'result' => 'failed',
                 'message' => 'Не удалось сформировать предварительную runtime-конфигурацию.',
+            ];
+        }
+    }
+
+    public function applyAction()
+    {
+        if (!$this->request->isPost()) {
+            return [
+                'result' => 'failed',
+                'message' => 'Применение runtime-конфигурации доступно только через POST-запрос.',
+            ];
+        }
+
+        try {
+            $response = trim((new Backend())->configdRun('sing-box apply'));
+            if (str_starts_with($response, 'OK ')) {
+                return [
+                    'result' => 'ok',
+                    'message' => substr($response, 3),
+                ];
+            }
+
+            return [
+                'result' => 'failed',
+                'message' => $response !== '' ? $response : 'Backend не подтвердил применение runtime-конфигурации.',
+            ];
+        } catch (\Throwable $error) {
+            return [
+                'result' => 'failed',
+                'message' => 'Не удалось применить runtime-конфигурацию через configd.',
             ];
         }
     }
