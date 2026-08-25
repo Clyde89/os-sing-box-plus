@@ -54,6 +54,7 @@ need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/ACL/ACL.xml"
 need_file "src/usr/local/www/sing-box.php"
 need_file "src/usr/local/www/sing-box_log.php"
 need_file "src/usr/local/share/licenses/os-sing-box/LICENSE.plugin"
+need_file "src/usr/local/share/licenses/os-sing-box/LICENSE.opnsense"
 need_file "src/usr/local/share/licenses/os-sing-box/LICENSE.sing-box"
 need_file "packaging/freebsd/+PRE_INSTALL"
 need_file "packaging/freebsd/+POST_INSTALL"
@@ -165,6 +166,12 @@ prepare_binary() {
 echo "==> Подготавливаются файлы пакета"
 copy_tree "$SCRIPT_DIR/src" "$STAGEDIR"
 prepare_binary "$SING_BOX_ASSET" "$SING_BOX_DOWNLOAD_URL" "$DOWNLOADDIR/sing-box"
+
+if ! "$DOWNLOADDIR/sing-box" check -c "$SCRIPT_DIR/src/usr/local/etc/sing-box/config.json.sample" >/dev/null 2>&1; then
+    die "базовый config.json.sample не прошёл проверку sing-box $SING_BOX_RELEASE"
+fi
+echo "==> Базовая конфигурация проверена sing-box $SING_BOX_RELEASE"
+
 mkdir -p "$STAGEDIR/usr/local/bin"
 install -m 0755 "$DOWNLOADDIR/sing-box" "$STAGEDIR/usr/local/bin/sing-box"
 chmod 0700 "$STAGEDIR/usr/local/etc/sing-box"
@@ -174,6 +181,7 @@ chmod 0755 "$STAGEDIR/usr/local/etc/rc.d/sing-box"
 chmod 0755 "$STAGEDIR/usr/local/etc/rc.syshook.d/start/70-sing-box-readiness"
 chmod 0755 "$STAGEDIR/usr/local/sbin/sing-box-readiness"
 chmod 0644 "$STAGEDIR/usr/local/share/licenses/os-sing-box/LICENSE.plugin"
+chmod 0644 "$STAGEDIR/usr/local/share/licenses/os-sing-box/LICENSE.opnsense"
 chmod 0644 "$STAGEDIR/usr/local/share/licenses/os-sing-box/LICENSE.sing-box"
 
 echo "==> Формируется список файлов"
