@@ -29,7 +29,7 @@
         <id>settings.dns.listenAddress</id>
         <label>Адрес DNS-listener</label>
         <type>text</type>
-        <help>Локальный адрес, на котором sing-box принимает DNS-запросы.</help>
+        <help>Локальный адрес, на котором sing-box принимает перенаправленные DNS-запросы.</help>
     </field>
     <field>
         <id>settings.dns.listenPort</id>
@@ -49,14 +49,21 @@
         <label>Режим policy outbound</label>
         <type>dropdown</type>
         <advanced>true</advanced>
-        <help>Определяет способ выхода трафика выбранных доменов. На текущем этапе поддерживается прямой outbound с привязкой к отдельному исходящему IPv4-адресу.</help>
+        <help>Определяет способ выхода трафика выбранных доменов. Поддерживается прямой outbound с привязкой к отдельному исходящему IPv4-адресу.</help>
     </field>
     <field>
         <id>settings.policy.bindAddress</id>
         <label>Исходящий IPv4-адрес policy-маршрута</label>
         <type>text</type>
         <advanced>true</advanced>
-        <help>IPv4-адрес, к которому sing-box привязывает policy outbound. На OPNsense для этого адреса должен быть настроен соответствующий маршрут или gateway policy.</help>
+        <help>IPv4-адрес, к которому sing-box привязывает policy outbound. Адрес должен принадлежать OPNsense и использоваться только для управляемого policy-маршрута.</help>
+    </field>
+    <field>
+        <id>settings.policy.gateway</id>
+        <label>Gateway policy-маршрута</label>
+        <type>dropdown</type>
+        <advanced>true</advanced>
+        <help>Выберите IPv4 gateway OPNsense, через который должен выходить source-bound policy-трафик. Если gateway недоступен, fail-closed правило не позволит этому трафику уйти обычным маршрутом.</help>
     </field>
     <field>
         <id>settings.tun.interfaceName</id>
