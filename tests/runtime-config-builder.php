@@ -23,6 +23,7 @@ function assertSameValue($expected, $actual, string $label): void
 $basePlan = RuntimeConfigBuilder::build([
     'capture' => [
         'mode' => 'selected',
+        'interfaces' => '',
         'clients' => '',
     ],
     'dns' => [
@@ -45,6 +46,7 @@ assertSameValue(['172.19.0.1/30'], $basePlan['config']['inbounds'][0]['address']
 assertSameValue('127.0.0.1', $basePlan['config']['inbounds'][1]['listen'], 'Адрес DNS-listener');
 assertSameValue(55353, $basePlan['config']['inbounds'][1]['listen_port'], 'Порт DNS-listener');
 assertSameValue('hijack-dns', $basePlan['config']['route']['rules'][0]['action'], 'DNS hijack action');
+assertSameValue([], $basePlan['selectors']['capture_interfaces'], 'Базовый план не должен содержать интерфейсы захвата');
 assertSameValue([], $basePlan['selectors']['source_ip_cidr'], 'Базовый план не должен содержать скомпилированные адреса клиентов');
 assertSameValue('198.18.0.0/15', $basePlan['policy_plan']['fakeip_ipv4_range'], 'Базовый диапазон FakeIP');
 assertSameValue(1, $basePlan['policy_plan']['schema_version'], 'Версия декларативного policy-плана');
@@ -60,6 +62,7 @@ if (!is_array($decoded)) {
 $selectionPlan = RuntimeConfigBuilder::build([
     'capture' => [
         'mode' => 'selected',
+        'interfaces' => 'lan',
         'clients' => "192.0.2.10-192.0.2.20\n2001:db8::10\n",
     ],
     'dns' => [
@@ -76,6 +79,7 @@ $selectionPlan = RuntimeConfigBuilder::build([
 ]);
 
 assertSameValue(false, $selectionPlan['apply_ready'], 'План с policy-селекторами должен блокировать применение до подключения policy routing');
+assertSameValue(['lan'], $selectionPlan['selectors']['capture_interfaces'], 'Интерфейсы захвата runtime preview');
 assertSameValue(
     ['192.0.2.10-192.0.2.20', '2001:db8::10'],
     $selectionPlan['selectors']['clients'],
@@ -88,6 +92,7 @@ assertSameValue(
 );
 assertSameValue(['example.org'], $selectionPlan['selectors']['domain'], 'Компиляция точных доменов');
 assertSameValue(['.sub.example.org'], $selectionPlan['selectors']['domain_suffix'], 'Компиляция wildcard-доменов');
+assertSameValue(['lan'], $selectionPlan['policy_plan']['capture_interfaces'], 'Интерфейсы захвата policy-плана');
 assertSameValue('198.20.0.0/16', $selectionPlan['policy_plan']['fakeip_ipv4_range'], 'Пользовательский диапазон FakeIP IPv4');
 assertSameValue(['A'], $selectionPlan['policy_plan']['dns_query_types'], 'Типы DNS-запросов FakeIP preview');
 assertSameValue(true, $selectionPlan['policy_plan']['requires_opnsense_dns_redirect'], 'Требование DNS redirect OPNsense');
@@ -97,6 +102,7 @@ assertSameValue(false, $selectionPlan['policy_plan']['ready'], 'Policy-план 
 assertSameValue('127.0.0.1', $selectionPlan['policy_plan']['dns_redirect']['target_address'], 'Целевой адрес DNS redirect');
 assertSameValue(55353, $selectionPlan['policy_plan']['dns_redirect']['target_port'], 'Целевой порт DNS redirect');
 assertSameValue(3, count($selectionPlan['policy_plan']['operations']), 'Количество декларативных операций policy-плана');
+assertSameValue('lan', $selectionPlan['policy_plan']['operations'][0]['interface'] ?? null, 'Интерфейс первой DNS redirect операции');
 
 $fakeipServer = $selectionPlan['config']['dns']['servers'][1] ?? null;
 if (!is_array($fakeipServer)) {
@@ -126,7 +132,7 @@ if (count($selectionPlan['warnings']) !== 3) {
 }
 
 $missingClientsPlan = RuntimeConfigBuilder::build([
-    'capture' => ['mode' => 'selected', 'clients' => ''],
+    'capture' => ['mode' => 'selected', 'interfaces' => 'lan', 'clients' => ''],
     'dns' => ['redirectDomains' => 'example.org'],
     'tun' => [],
 ]);
@@ -136,19 +142,46 @@ if (isset($missingClientsPlan['config']['dns']['rules'])) {
     failTest('Selected mode без клиентов не должен формировать небезопасное DNS/FakeIP правило без source filter.');
 }
 
+$missingInterfacesPlan = RuntimeConfigBuilder::build([
+    'capture' => ['mode' => 'selected', 'interfaces' => '', 'clients' => '192.0.2.10'],
+    'dns' => ['redirectDomains' => 'example.org'],
+    'tun' => [],
+]);
+assertSameValue(false, $missingInterfacesPlan['apply_ready'], 'Policy preview без интерфейсов должен блокировать применение');
+assertSameValue(false, $missingInterfacesPlan['policy_plan']['dns_redirect']['ready'], 'Policy preview без интерфейсов должен блокировать DNS redirect OPNsense');
+if (!isset($missingInterfacesPlan['config']['dns']['rules'][0])) {
+    failTest('Отсутствие интерфейса OPNsense не должно удалять безопасный DNS/FakeIP preview sing-box.');
+}
+
 $allLanPlan = RuntimeConfigBuilder::build([
-    'capture' => ['mode' => 'all_lan'],
+    'capture' => ['mode' => 'all_lan', 'interfaces' => ['lan', 'opt1']],
     'dns' => ['redirectDomains' => 'example.org'],
     'tun' => [],
 ]);
 assertSameValue(false, $allLanPlan['apply_ready'], 'Режим all_lan должен блокировать применение до генерации правил OPNsense');
 assertSameValue(true, $allLanPlan['policy_plan']['confirmation_required'], 'Режим all_lan должен требовать явного подтверждения');
+assertSameValue(['lan', 'opt1'], $allLanPlan['policy_plan']['capture_interfaces'], 'Интерфейсы all_lan policy-плана');
+assertSameValue(5, count($allLanPlan['policy_plan']['operations']), 'All LAN на двух интерфейсах должен сформировать четыре DNS redirect и FakeIP route');
 $allLanDnsRule = $allLanPlan['config']['dns']['rules'][0] ?? null;
 if (!is_array($allLanDnsRule)) {
     failTest('Режим all_lan с доменами должен формировать DNS/FakeIP preview без source filter.');
 }
 if (array_key_exists('source_ip_cidr', $allLanDnsRule)) {
     failTest('Режим all_lan не должен добавлять source_ip_cidr в DNS/FakeIP правило.');
+}
+
+$wanRejected = false;
+try {
+    RuntimeConfigBuilder::build([
+        'capture' => ['mode' => 'selected', 'interfaces' => 'wan'],
+        'dns' => [],
+        'tun' => [],
+    ]);
+} catch (RuntimeException $error) {
+    $wanRejected = true;
+}
+if (!$wanRejected) {
+    failTest('Runtime builder должен отклонять WAN как интерфейс автоматического захвата.');
 }
 
 $invalidRangeRejected = false;
@@ -167,11 +200,12 @@ if (!$invalidRangeRejected) {
 
 $wrappedPlan = RuntimeConfigBuilder::build([
     'settings' => [
-        'capture' => ['mode' => 'selected'],
+        'capture' => ['mode' => 'selected', 'interfaces' => 'lan,opt1'],
         'dns' => ['listenPort' => '5353'],
         'tun' => [],
     ],
 ]);
 assertSameValue(5353, $wrappedPlan['config']['inbounds'][1]['listen_port'], 'Поддержка корневого узла settings');
+assertSameValue(['lan', 'opt1'], $wrappedPlan['selectors']['capture_interfaces'], 'Разбор списка интерфейсов из строки MVC');
 
-echo "Предварительный рендер runtime-конфигурации проверен\n";
+echo "Предварительный рендер runtime-конфигурации с интерфейсами захвата проверен\n";
