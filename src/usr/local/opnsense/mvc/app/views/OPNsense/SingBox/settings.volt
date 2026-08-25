@@ -27,6 +27,7 @@
         function renderPolicySummary(data) {
             const plan = data && data.policy_plan ? data.policy_plan : {};
             const selectors = data && data.selectors ? data.selectors : {};
+            const captureInterfaces = Array.isArray(plan.capture_interfaces) ? plan.capture_interfaces : [];
             const clients = Array.isArray(selectors.clients) ? selectors.clients : [];
             const compiledClients = Array.isArray(plan.source_ip_cidr) ? plan.source_ip_cidr : [];
             const domains = Array.isArray(plan.domain) ? plan.domain : [];
@@ -51,8 +52,9 @@
             }
 
             const dnsRedirectText = dnsRedirect.required === true
-                ? captureModeLabel(dnsRedirect.scope) + ': DNS/53 → ' +
-                    (dnsRedirect.target_address || 'не задано') + ':' + (dnsRedirect.target_port || 'не задано')
+                ? captureModeLabel(dnsRedirect.scope) + ': ' +
+                    (captureInterfaces.length > 0 ? captureInterfaces.join(', ') : 'интерфейсы не выбраны') +
+                    ', DNS/53 → ' + (dnsRedirect.target_address || 'не задано') + ':' + (dnsRedirect.target_port || 'не задано')
                 : 'Не требуется';
             const fakeIpRouteText = fakeIpRoute.required === true
                 ? (fakeIpRoute.network || 'не задано') + ' → ' + (fakeIpRoute.interface || 'не задано')
@@ -63,6 +65,7 @@
 
             $('#policyManagementState').text(managementStateLabel(data.management_state));
             $('#policyCaptureMode').text(captureModeLabel(plan.capture_mode));
+            $('#policyInterfaces').text(captureInterfaces.length > 0 ? captureInterfaces.join(', ') : 'не выбраны');
             $('#policyClientCount').text(clients.length + ' исходных, ' + compiledClients.length + ' CIDR-селекторов');
             $('#policyDomainCount').text(domains.length + ' точных, ' + suffixes.length + ' wildcard');
             $('#policyFakeIp').text(plan.fakeip_ipv4_range || 'не используется');
@@ -187,7 +190,8 @@
             <dl class="dl-horizontal" style="margin-bottom: 10px;">
                 <dt>Состояние конфигурации</dt><dd id="policyManagementState"></dd>
                 <dt>Состояние policy-плана</dt><dd id="policyPlanState"></dd>
-                <dt>Клиенты</dt><dd id="policyCaptureMode"></dd>
+                <dt>Режим захвата</dt><dd id="policyCaptureMode"></dd>
+                <dt>Интерфейсы захвата</dt><dd id="policyInterfaces"></dd>
                 <dt>Селекторы клиентов</dt><dd id="policyClientCount"></dd>
                 <dt>Домены</dt><dd id="policyDomainCount"></dd>
                 <dt>FakeIP IPv4</dt><dd id="policyFakeIp"></dd>
