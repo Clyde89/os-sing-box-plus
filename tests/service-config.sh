@@ -6,25 +6,35 @@ HELPER="$ROOT_DIR/src/usr/local/sbin/sing-box-service-config"
 ACTIONS="$ROOT_DIR/src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf"
 TMP_DIR="$(mktemp -d)"
 RC_FILE="$TMP_DIR/sing_box"
+SETUP_FILE="$TMP_DIR/setup-required"
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
 
 [ -x "$HELPER" ]
 [ -f "$ACTIONS" ]
 
-state="$(SING_BOX_RC_CONF_FILE="$RC_FILE" "$HELPER" status)"
+state="$(SING_BOX_RC_CONF_FILE="$RC_FILE" SING_BOX_SETUP_REQUIRED_FILE="$SETUP_FILE" "$HELPER" status)"
 [ "$state" = "NO" ]
 
-SING_BOX_RC_CONF_FILE="$RC_FILE" "$HELPER" enable >/dev/null
+: > "$SETUP_FILE"
+set +e
+SING_BOX_RC_CONF_FILE="$RC_FILE" SING_BOX_SETUP_REQUIRED_FILE="$SETUP_FILE" "$HELPER" enable >/dev/null 2>&1
+status=$?
+set -e
+[ "$status" -eq 65 ]
+[ ! -e "$RC_FILE" ]
+rm -f "$SETUP_FILE"
+
+SING_BOX_RC_CONF_FILE="$RC_FILE" SING_BOX_SETUP_REQUIRED_FILE="$SETUP_FILE" "$HELPER" enable >/dev/null
 grep -q '^sing_box_enable="YES"$' "$RC_FILE"
 [ "$(stat -c '%a' "$RC_FILE")" = "644" ]
-[ "$(SING_BOX_RC_CONF_FILE="$RC_FILE" "$HELPER" status)" = "YES" ]
+[ "$(SING_BOX_RC_CONF_FILE="$RC_FILE" SING_BOX_SETUP_REQUIRED_FILE="$SETUP_FILE" "$HELPER" status)" = "YES" ]
 
-SING_BOX_RC_CONF_FILE="$RC_FILE" "$HELPER" disable >/dev/null
+SING_BOX_RC_CONF_FILE="$RC_FILE" SING_BOX_SETUP_REQUIRED_FILE="$SETUP_FILE" "$HELPER" disable >/dev/null
 grep -q '^sing_box_enable="NO"$' "$RC_FILE"
-[ "$(SING_BOX_RC_CONF_FILE="$RC_FILE" "$HELPER" status)" = "NO" ]
+[ "$(SING_BOX_RC_CONF_FILE="$RC_FILE" SING_BOX_SETUP_REQUIRED_FILE="$SETUP_FILE" "$HELPER" status)" = "NO" ]
 
 set +e
-SING_BOX_RC_CONF_FILE="$RC_FILE" "$HELPER" invalid >/dev/null 2>&1
+SING_BOX_RC_CONF_FILE="$RC_FILE" SING_BOX_SETUP_REQUIRED_FILE="$SETUP_FILE" "$HELPER" invalid >/dev/null 2>&1
 status=$?
 set -e
 [ "$status" -eq 64 ]
