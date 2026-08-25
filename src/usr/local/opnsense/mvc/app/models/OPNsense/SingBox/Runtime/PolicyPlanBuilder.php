@@ -2,6 +2,8 @@
 
 namespace OPNsense\SingBox\Runtime;
 
+require_once __DIR__ . '/PolicyPlanValidator.php';
+
 final class PolicyPlanBuilder
 {
     private const SCHEMA_VERSION = 1;
