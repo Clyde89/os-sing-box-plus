@@ -108,7 +108,13 @@ reload_firewall() {
 
 activate_policy_rules() {
     if [ -f "$managed_policy" ] && [ -r "$policy_plan" ]; then
-        : > "$policy_active" || return 1
+        policy_checksum="$(sha256 -q "$policy_plan" 2>/dev/null || true)"
+        if [ -z "$policy_checksum" ]; then
+            echo "Не удалось вычислить SHA-256 управляемого policy-плана."
+            return 1
+        fi
+
+        printf '%s\n' "$policy_checksum" > "$policy_active" || return 1
         chmod 0600 "$policy_active" || {
             rm -f "$policy_active"
             return 1
@@ -143,11 +149,14 @@ activate_policy_rules() {
 deactivate_policy_rules() {
     [ -f "$policy_active" ] || return 0
 
+    active_checksum="$(cat "$policy_active" 2>/dev/null || true)"
     rm -f "$policy_active"
     echo "Отключаются управляемые правила DNS redirect и policy routing..."
     if ! reload_firewall; then
-        : > "$policy_active" 2>/dev/null || true
-        chmod 0600 "$policy_active" 2>/dev/null || true
+        if [ -n "$active_checksum" ]; then
+            printf '%s\n' "$active_checksum" > "$policy_active" 2>/dev/null || true
+            chmod 0600 "$policy_active" 2>/dev/null || true
+        fi
         echo "Не удалось безопасно отключить управляемые правила firewall."
         return 1
     fi
