@@ -69,6 +69,12 @@ assertMessageContains(
 assertInvalid(SelectionValidator::validateCaptureInterfaces(['lan', 'LAN']), 'Повтор интерфейса без учёта регистра');
 assertInvalid(SelectionValidator::validateCaptureInterfaces(['lan/1']), 'Некорректное имя интерфейса захвата');
 
+assertValid(SelectionValidator::validateIpv4Address('192.0.2.70'), 'Корректный IPv4-адрес policy outbound');
+assertValid(SelectionValidator::validateIpv4Address('', true), 'Пустой необязательный IPv4-адрес policy outbound');
+assertInvalid(SelectionValidator::validateIpv4Address(''), 'Пустой обязательный IPv4-адрес policy outbound');
+assertInvalid(SelectionValidator::validateIpv4Address('192.0.2.70/32'), 'CIDR вместо IPv4-адреса policy outbound');
+assertInvalid(SelectionValidator::validateIpv4Address('2001:db8::70'), 'IPv6 вместо IPv4-адреса policy outbound');
+
 assertValid(SelectionValidator::validateIpv4Network('198.18.0.0/15'), 'Стандартный диапазон FakeIP');
 assertValid(SelectionValidator::validateIpv4Network('10.0.0.0/8'), 'Пользовательская IPv4-сеть FakeIP');
 assertValid(SelectionValidator::validateIpv4Network('0.0.0.0/0'), 'IPv4-сеть с нулевым префиксом');
@@ -88,4 +94,4 @@ for ($index = 0; $index < 4097; $index++) {
 }
 assertInvalid(SelectionValidator::validateClients(implode("\n", $tooManyItems)), 'Превышение количества элементов');
 
-echo "Валидация доменов, клиентов, интерфейсов и диапазона FakeIP проверена\n";
+echo "Валидация доменов, клиентов, интерфейсов, policy IPv4 и диапазона FakeIP проверена\n";
