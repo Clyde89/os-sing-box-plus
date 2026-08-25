@@ -35,7 +35,10 @@ jobs:
           test -f tests/log-control.sh
           test -f tests/selection-validator.php
           test -f tests/selector-compiler.php
+          test -f tests/policy-plan-validator.php
           test -f tests/policy-plan-builder.php
+          test -f tests/firewall-rule-builder.php
+          test -f tests/firewall-anchor-static.sh
           test -f tests/runtime-config-builder.php
           test -f tests/runtime-config-apply-static.sh
           test -f tests/mvc-settings-ui-static.sh
@@ -58,6 +61,8 @@ jobs:
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanValidator.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/FirewallRuleBuilder.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
           test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/SettingsController.php
@@ -254,6 +259,18 @@ jobs:
           set -euo pipefail
           php tests/policy-plan-builder.php
 
+      - name: Проверка fail-closed валидации policy-плана
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/policy-plan-validator.php
+
+      - name: Проверка генерации firewall-правил OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/firewall-rule-builder.php
+
       - name: Проверка предварительного рендера runtime-конфигурации
         shell: bash
         run: |
@@ -265,3 +282,9 @@ jobs:
         run: |
           set -euo pipefail
           sh tests/runtime-config-apply-static.sh
+
+      - name: Проверка регистрации firewall-правил OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/firewall-anchor-static.sh
