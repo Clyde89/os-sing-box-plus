@@ -19,6 +19,7 @@ final class RuntimeConfigBuilder
         $tun = is_array($nodes['tun'] ?? null) ? $nodes['tun'] : [];
 
         $captureMode = self::stringValue($capture['mode'] ?? 'selected');
+        $captureInterfaces = self::listValue($capture['interfaces'] ?? []);
         $clients = self::splitLines(self::stringValue($capture['clients'] ?? ''));
         $redirectDomains = self::splitLines(self::stringValue($dns['redirectDomains'] ?? ''));
         $dnsListenAddress = self::stringValue($dns['listenAddress'] ?? '127.0.0.1');
@@ -32,12 +33,19 @@ final class RuntimeConfigBuilder
             $fakeIpRange = self::DEFAULT_FAKEIP_IPV4_RANGE;
         }
 
-        self::validateStructuredInput($captureMode, $clients, $redirectDomains, $fakeIpRange);
+        self::validateStructuredInput(
+            $captureMode,
+            $captureInterfaces,
+            $clients,
+            $redirectDomains,
+            $fakeIpRange
+        );
 
         $compiledClients = SelectorCompiler::compileClients($clients);
         $compiledDomains = SelectorCompiler::compileDomains($redirectDomains);
         $policyPlan = PolicyPlanBuilder::build(
             $captureMode,
+            $captureInterfaces,
             $compiledClients,
             $compiledDomains,
             $dnsListenAddress,
@@ -74,13 +82,17 @@ final class RuntimeConfigBuilder
                 $dnsRule['domain_suffix'] = $compiledDomains['domain_suffix'];
             }
 
-            $dnsRuleReady = $policyPlan['dns_redirect']['ready'] === true;
+            $dnsRuleReady = $captureMode === 'all_lan' || $compiledClients !== [];
             if ($captureMode === 'selected') {
                 if (!$dnsRuleReady) {
                     $warnings[] = 'Для режима выбранных клиентов необходимо указать хотя бы один IP-адрес, CIDR или диапазон.';
                 } else {
                     $dnsRule['source_ip_cidr'] = $compiledClients;
                 }
+            }
+
+            if ($captureInterfaces === []) {
+                $warnings[] = 'Для policy-маршрутизации необходимо выбрать хотя бы один интерфейс локальной сети.';
             }
 
             if ($dnsRuleReady) {
@@ -92,8 +104,8 @@ final class RuntimeConfigBuilder
             $warnings[] = 'Селекторы доменов уже компилируются в DNS/FakeIP preview, но policy outbound ещё не подключён.';
             $warnings[] = 'Правила перенаправления DNS и FakeIP-трафика на стороне OPNsense ещё не применяются автоматически.';
             $warnings[] = 'Текущий FakeIP preview обрабатывает только A-запросы; IPv6 policy routing будет добавлен отдельно.';
-        } elseif ($clients !== []) {
-            $warnings[] = 'Список клиентов задан, но список доменов пуст; policy-маршрутизация пока не формируется.';
+        } elseif ($clients !== [] || $captureInterfaces !== []) {
+            $warnings[] = 'Параметры захвата заданы, но список доменов пуст; policy-маршрутизация пока не формируется.';
         }
 
         if ($captureMode === 'all_lan') {
@@ -153,6 +165,7 @@ final class RuntimeConfigBuilder
             'config' => $config,
             'selectors' => [
                 'capture_mode' => $captureMode,
+                'capture_interfaces' => $captureInterfaces,
                 'clients' => $clients,
                 'redirect_domains' => $redirectDomains,
                 'source_ip_cidr' => $compiledClients,
@@ -181,6 +194,7 @@ final class RuntimeConfigBuilder
 
     private static function validateStructuredInput(
         string $captureMode,
+        array $captureInterfaces,
         array $clients,
         array $redirectDomains,
         string $fakeIpRange
@@ -190,6 +204,7 @@ final class RuntimeConfigBuilder
         }
 
         $messages = array_merge(
+            SelectionValidator::validateCaptureInterfaces($captureInterfaces),
             SelectionValidator::validateClients(implode("\n", $clients)),
             SelectionValidator::validateDomains(implode("\n", $redirectDomains)),
             SelectionValidator::validateIpv4Network($fakeIpRange)
@@ -206,6 +221,33 @@ final class RuntimeConfigBuilder
         foreach (preg_split('/\R/u', $value) ?: [] as $item) {
             $item = trim($item);
             if ($item !== '') {
+                $result[] = $item;
+            }
+        }
+        return $result;
+    }
+
+    private static function listValue($value): array
+    {
+        if (is_array($value)) {
+            $items = $value;
+        } elseif (is_scalar($value) || (is_object($value) && method_exists($value, '__toString'))) {
+            $candidate = trim((string)$value);
+            $items = $candidate === '' ? [] : preg_split('/[\s,]+/', $candidate) ?: [];
+        } else {
+            return [];
+        }
+
+        $result = [];
+        $seen = [];
+        foreach ($items as $item) {
+            $item = trim((string)$item);
+            if ($item === '') {
+                continue;
+            }
+            $key = strtolower($item);
+            if (!isset($seen[$key])) {
+                $seen[$key] = true;
                 $result[] = $item;
             }
         }
