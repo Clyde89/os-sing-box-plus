@@ -6,6 +6,12 @@
         <help>Безопасный режим по умолчанию обрабатывает только явно выбранных клиентов. Перенаправление всего локального трафика включается только после явного выбора.</help>
     </field>
     <field>
+        <id>settings.capture.interfaces</id>
+        <label>Интерфейсы локальной сети</label>
+        <type>dropdown</type>
+        <help>Выберите интерфейсы LAN/VLAN, с которых разрешён захват трафика. WAN намеренно запрещён для автоматического захвата.</help>
+    </field>
+    <field>
         <id>settings.capture.clients</id>
         <label>Клиенты для перенаправления</label>
         <type>textbox</type>
