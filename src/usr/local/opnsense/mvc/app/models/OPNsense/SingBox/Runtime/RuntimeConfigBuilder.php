@@ -28,6 +28,7 @@ final class RuntimeConfigBuilder
         $fakeIpRange = self::stringValue($dns['fakeIpRange'] ?? self::DEFAULT_FAKEIP_IPV4_RANGE);
         $policyOutboundMode = self::stringValue($policy['outboundMode'] ?? 'direct_bind');
         $policyBindAddress = self::stringValue($policy['bindAddress'] ?? '');
+        $policyGateway = self::stringValue($policy['gateway'] ?? '');
         $tunInterface = self::stringValue($tun['interfaceName'] ?? 'tun_singbox');
         $tunAddress = self::stringValue($tun['address'] ?? '172.19.0.1/30');
         $tunStack = self::stringValue($tun['stack'] ?? 'system');
@@ -46,15 +47,26 @@ final class RuntimeConfigBuilder
             $redirectDomains,
             $fakeIpRange,
             $policyOutboundMode,
-            $policyBindAddress
+            $policyBindAddress,
+            $policyGateway
         );
 
         $compiledClients = SelectorCompiler::compileClients($clients);
+        $compiledIpv4Clients = [];
+        $compiledIpv6Clients = [];
+        foreach ($compiledClients as $client) {
+            if (str_contains($client, ':')) {
+                $compiledIpv6Clients[] = $client;
+            } else {
+                $compiledIpv4Clients[] = $client;
+            }
+        }
+
         $compiledDomains = SelectorCompiler::compileDomains($redirectDomains);
         $policyPlan = PolicyPlanBuilder::build(
             $captureMode,
             $captureInterfaces,
-            $compiledClients,
+            $compiledIpv4Clients,
             $compiledDomains,
             $dnsListenAddress,
             $dnsListenPort,
@@ -62,7 +74,8 @@ final class RuntimeConfigBuilder
             $tunInterface,
             $tunAddress,
             $policyOutboundMode,
-            $policyBindAddress
+            $policyBindAddress,
+            $policyGateway
         );
         PolicyPlanValidator::assertValid($policyPlan);
         $policyRequired = $policyPlan['required'] === true;
@@ -93,21 +106,26 @@ final class RuntimeConfigBuilder
                 $dnsRule['domain_suffix'] = $compiledDomains['domain_suffix'];
             }
 
-            $dnsRuleReady = $captureMode === 'all_lan' || $compiledClients !== [];
+            $dnsRuleReady = $captureMode === 'all_lan' || $compiledIpv4Clients !== [];
             if ($captureMode === 'selected') {
                 if (!$dnsRuleReady) {
-                    $warnings[] = 'Для режима выбранных клиентов необходимо указать хотя бы один IP-адрес, CIDR или диапазон.';
+                    $warnings[] = 'Для IPv4 policy routing в режиме выбранных клиентов необходимо указать хотя бы один IPv4-адрес, CIDR или диапазон.';
                 } else {
-                    $dnsRule['source_ip_cidr'] = $compiledClients;
+                    $dnsRule['source_ip_cidr'] = $compiledIpv4Clients;
                 }
             }
 
-            if ($captureInterfaces === []) {
-                $warnings[] = 'Для policy-маршрутизации необходимо выбрать хотя бы один интерфейс локальной сети.';
+            if ($compiledIpv6Clients !== []) {
+                $warnings[] = 'IPv6-клиенты сохранены в модели, но текущий FakeIP policy-контур поддерживает только IPv4/A-запросы.';
             }
-
+            if ($captureInterfaces === []) {
+                $warnings[] = 'Для policy routing необходимо выбрать хотя бы один интерфейс локальной сети.';
+            }
             if ($policyBindAddress === '') {
                 $warnings[] = 'Для policy outbound необходимо указать отдельный исходящий IPv4-адрес.';
+            }
+            if ($policyGateway === '') {
+                $warnings[] = 'Для policy routing необходимо выбрать IPv4 gateway OPNsense.';
             }
 
             if ($dnsRuleReady) {
@@ -115,15 +133,12 @@ final class RuntimeConfigBuilder
                 $dnsRule['server'] = 'fakeip-dns';
                 $dnsRules[] = $dnsRule;
             }
-
-            $warnings[] = 'Правила перенаправления DNS и FakeIP-трафика на стороне OPNsense ещё не применяются автоматически.';
-            $warnings[] = 'Текущий FakeIP preview обрабатывает только A-запросы; IPv6 policy routing будет добавлен отдельно.';
         } elseif ($clients !== [] || $captureInterfaces !== []) {
-            $warnings[] = 'Параметры захвата заданы, но список доменов пуст; policy-маршрутизация пока не формируется.';
+            $warnings[] = 'Параметры захвата заданы, но список доменов пуст; policy routing не формируется.';
         }
 
-        if ($captureMode === 'all_lan') {
-            $warnings[] = 'Режим всего локального трафика требует отдельного подтверждения и ещё не подключён к правилам OPNsense.';
+        if ($captureMode === 'all_lan' && $policyRequired) {
+            $warnings[] = 'Режим всего локального трафика требует отдельного подтверждения перед активацией автоматических правил.';
         }
 
         $dnsConfig = [
@@ -161,6 +176,19 @@ final class RuntimeConfigBuilder
             ];
         }
 
+        $tunInbound = [
+            'type' => 'tun',
+            'tag' => 'tun-in',
+            'interface_name' => $tunInterface,
+            'address' => [$tunAddress],
+            'auto_route' => $policyRequired,
+            'strict_route' => false,
+            'stack' => $tunStack,
+        ];
+        if ($policyRequired) {
+            $tunInbound['route_address'] = [$fakeIpRange];
+        }
+
         $config = [
             'log' => [
                 'disabled' => false,
@@ -169,15 +197,7 @@ final class RuntimeConfigBuilder
             ],
             'dns' => $dnsConfig,
             'inbounds' => [
-                [
-                    'type' => 'tun',
-                    'tag' => 'tun-in',
-                    'interface_name' => $tunInterface,
-                    'address' => [$tunAddress],
-                    'auto_route' => false,
-                    'strict_route' => false,
-                    'stack' => $tunStack,
-                ],
+                $tunInbound,
                 [
                     'type' => 'direct',
                     'tag' => 'dns-in',
@@ -200,15 +220,18 @@ final class RuntimeConfigBuilder
                 'clients' => $clients,
                 'redirect_domains' => $redirectDomains,
                 'source_ip_cidr' => $compiledClients,
+                'source_ipv4_cidr' => $compiledIpv4Clients,
+                'source_ipv6_cidr' => $compiledIpv6Clients,
                 'domain' => $compiledDomains['domain'],
                 'domain_suffix' => $compiledDomains['domain_suffix'],
                 'policy_outbound_mode' => $policyOutboundMode,
                 'policy_bind_address' => $policyBindAddress,
+                'policy_gateway' => $policyGateway,
             ],
             'policy_plan' => $policyPlan,
             'policy_sha256' => PolicyPlanValidator::checksum($policyPlan),
             'warnings' => $warnings,
-            'apply_ready' => $warnings === [],
+            'apply_ready' => $warnings === [] && $policyPlan['ready'] === true,
         ];
     }
 
@@ -233,13 +256,17 @@ final class RuntimeConfigBuilder
         array $redirectDomains,
         string $fakeIpRange,
         string $policyOutboundMode,
-        string $policyBindAddress
+        string $policyBindAddress,
+        string $policyGateway
     ): void {
         if (!in_array($captureMode, ['selected', 'all_lan'], true)) {
             throw new \RuntimeException('MVC-модель содержит неподдерживаемый режим перенаправления.');
         }
         if ($policyOutboundMode !== 'direct_bind') {
             throw new \RuntimeException('MVC-модель содержит неподдерживаемый режим policy outbound.');
+        }
+        if ($policyGateway !== '' && preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $policyGateway) !== 1) {
+            throw new \RuntimeException('MVC-модель содержит некорректное имя gateway policy routing.');
         }
 
         $messages = array_merge(
