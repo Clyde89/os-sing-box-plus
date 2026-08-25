@@ -192,6 +192,9 @@ echo "==> Формируются метаданные"
     printf 'abi: "%s"\n' "$PKG_ABI"
     printf 'arch: "%s"\n' "$PKG_ARCH"
     printf 'prefix: "%s"\n' "$PREFIX"
+    printf 'categories: [ "net" ]\n'
+    printf 'licenselogic: "single"\n'
+    printf 'licenses: [ "MIT" ]\n'
     printf 'flatsize: %s\n' "$FLATSIZE"
     printf 'desc: <<EOD\n'
     cat "$SCRIPT_DIR/packaging/freebsd/pkg-descr"
