@@ -25,7 +25,19 @@ function sing_box_policy_is_managed()
 
 function sing_box_policy_is_active()
 {
-    return sing_box_policy_is_managed() && is_file('/var/run/sing-box-policy-active');
+    $planPath = '/var/db/os-sing-box/policy-plan.json';
+    $activePath = '/var/run/sing-box-policy-active';
+
+    if (!sing_box_policy_is_managed() || !is_readable($activePath)) {
+        return false;
+    }
+
+    $activeChecksum = trim((string)file_get_contents($activePath));
+    $currentChecksum = hash_file('sha256', $planPath);
+
+    return is_string($currentChecksum)
+        && $activeChecksum !== ''
+        && hash_equals($currentChecksum, $activeChecksum);
 }
 
 function sing_box_load_policy_plan()
