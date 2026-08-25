@@ -1,0 +1,47 @@
+<?php
+
+require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php';
+
+use OPNsense\SingBox\Validation\SelectionValidator;
+
+function assertValid(array $messages, string $label): void
+{
+    if ($messages !== []) {
+        fwrite(STDERR, $label . ': ожидался успешный результат, получено: ' . implode(' | ', $messages) . PHP_EOL);
+        exit(1);
+    }
+}
+
+function assertInvalid(array $messages, string $label): void
+{
+    if ($messages === []) {
+        fwrite(STDERR, $label . ': ожидалась ошибка валидации.' . PHP_EOL);
+        exit(1);
+    }
+}
+
+assertValid(
+    SelectionValidator::validateDomains("example.org\n*.sub.example.org\nexample.net.\nxn--e1afmkfd.xn--p1ai\n"),
+    'Корректные домены'
+);
+assertInvalid(SelectionValidator::validateDomains("https://example.org\n"), 'URL вместо домена');
+assertInvalid(SelectionValidator::validateDomains("*example.org\n"), 'Некорректный wildcard');
+assertInvalid(SelectionValidator::validateDomains("Example.org\nexample.org\n"), 'Повтор домена');
+
+assertValid(
+    SelectionValidator::validateClients(
+        "192.0.2.10\n2001:db8::10\n192.0.2.0/24\n2001:db8::/64\n192.0.2.10-192.0.2.20\n2001:db8::10-2001:db8::20\n"
+    ),
+    'Корректные клиенты'
+);
+assertInvalid(SelectionValidator::validateClients("192.0.2.10/99\n"), 'Некорректный IPv4 CIDR');
+assertInvalid(SelectionValidator::validateClients("2001:db8::1/129\n"), 'Некорректный IPv6 CIDR');
+assertInvalid(SelectionValidator::validateClients("192.0.2.20-192.0.2.10\n"), 'Обратный диапазон');
+assertInvalid(SelectionValidator::validateClients("192.0.2.10-2001:db8::10\n"), 'Смешанное семейство диапазона');
+assertInvalid(SelectionValidator::validateClients("192.0.2.10\n192.0.2.10\n"), 'Повтор клиента');
+assertInvalid(SelectionValidator::validateClients("client.example.org\n"), 'Домен вместо клиента');
+
+$tooMany = implode("\n", array_fill(0, 4097, '192.0.2.1'));
+assertInvalid(SelectionValidator::validateClients($tooMany), 'Превышение количества элементов');
+
+echo "Валидация списков доменов и клиентов проверена\n";
