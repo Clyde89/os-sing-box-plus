@@ -36,6 +36,7 @@ jobs:
           test -f tests/selection-validator.php
           test -f tests/runtime-config-builder.php
           test -f tests/runtime-config-apply-static.sh
+          test -f tests/mvc-settings-ui-static.sh
           test -f tests/stubs/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
@@ -53,7 +54,9 @@ jobs:
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/SettingsController.php
           test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          test -f src/usr/local/opnsense/mvc/app/views/OPNsense/SingBox/settings.volt
           test -f src/usr/local/share/licenses/os-sing-box/LICENSE.plugin
           test -f src/usr/local/share/licenses/os-sing-box/LICENSE.opnsense
           test -f src/usr/local/share/licenses/os-sing-box/LICENSE.sing-box
@@ -182,6 +185,12 @@ jobs:
           set -euo pipefail
           sh tests/migrate-legacy.sh
           sh tests/migrate-legacy-cases.sh
+
+      - name: Проверка структурированного WebUI настроек
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/mvc-settings-ui-static.sh
 
       - name: Установка PHP CLI
         shell: bash
