@@ -42,10 +42,16 @@ grep -q 'Технический JSON runtime-конфигурации' "$VIEW"
 grep -q '<id>settings.capture.interfaces</id>' "$FORM"
 grep -q 'WAN намеренно запрещён' "$FORM"
 grep -q '<id>settings.dns.fakeIpRange</id>' "$FORM"
+grep -q '<id>settings.policy.outboundMode</id>' "$FORM"
+grep -q '<id>settings.policy.bindAddress</id>' "$FORM"
+grep -q 'Исходящий IPv4-адрес policy-маршрута' "$FORM"
 grep -Fq '<interfaces type=".\CaptureInterfaceField">' "$MODEL"
 grep -q '<Multiple>Y</Multiple>' "$MODEL"
 grep -Fq '<fakeIpRange type=".\FakeIpRangeField">' "$MODEL"
 grep -q '<Default>198.18.0.0/15</Default>' "$MODEL"
+grep -q '<outboundMode type="OptionField">' "$MODEL"
+grep -q '<Default>direct_bind</Default>' "$MODEL"
+grep -q '<bindAddress type="NetworkField">' "$MODEL"
 grep -q "'policy_plan'" "$API_CONTROLLER"
 grep -q 'ui/singbox/\*' "$ACL"
 grep -q 'api/singbox/settings/\*' "$ACL"
@@ -65,4 +71,4 @@ if grep -q '\.html(' "$VIEW"; then
     exit 1
 fi
 
-echo "Разделение сохранения, интерфейсов захвата, policy preview и apply в MVC WebUI проверено"
+echo "Разделение сохранения, интерфейсов захвата, policy outbound, preview и apply в MVC WebUI проверено"
