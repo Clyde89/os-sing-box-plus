@@ -16,6 +16,7 @@ logdir="/var/log/sing-box"
 logfile="${logdir}/sing-box.log"
 command="/usr/local/bin/sing-box"
 config="/usr/local/etc/sing-box/config.json"
+pending_filter_reload="/var/db/os-sing-box/filter-reload.pending"
 
 # shellcheck disable=SC2034
 start_cmd="${name}_start"
@@ -93,6 +94,26 @@ cleanup_failed_start() {
     remove_stale_pidfile
 }
 
+apply_pending_filter_reload() {
+    [ -f "$pending_filter_reload" ] || return 0
+
+    if ! command -v configctl >/dev/null 2>&1; then
+        echo "Не удалось применить отложенные правила firewall: configctl недоступен."
+        return 1
+    fi
+
+    echo "Применяются отложенные правила firewall после legacy-миграции..."
+    if ! configctl filter reload >/dev/null 2>&1; then
+        echo "Не удалось применить отложенные правила firewall."
+        return 1
+    fi
+
+    rm -f "$pending_filter_reload"
+    rmdir "$(dirname "$pending_filter_reload")" 2>/dev/null || true
+    echo "Отложенные правила firewall применены."
+    return 0
+}
+
 sing_box_start() {
     echo "Запуск sing-box..."
 
@@ -159,6 +180,12 @@ sing_box_start() {
 
     if ! ifconfig tun_singbox >/dev/null 2>&1; then
         echo "Интерфейс tun_singbox не был создан за 20 секунд; запуск отменён."
+        cleanup_failed_start "$started_pid"
+        return 1
+    fi
+
+    if ! apply_pending_filter_reload; then
+        echo "Запуск sing-box отменён: отложенные правила firewall не применены."
         cleanup_failed_start "$started_pid"
         return 1
     fi
