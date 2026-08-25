@@ -30,6 +30,12 @@ grep -q 'Сохранение параметров не изменяет раб�
 grep -q 'Что будет настроено' "$VIEW"
 grep -q 'policySummary' "$VIEW"
 grep -q 'policyRequirements' "$VIEW"
+grep -q 'policyPlanState' "$VIEW"
+grep -q 'policyDnsRedirect' "$VIEW"
+grep -q 'policyFakeIpRoute' "$VIEW"
+grep -q 'policyOutbound' "$VIEW"
+grep -q 'policyOperationCount' "$VIEW"
+grep -q 'Операций OPNsense' "$VIEW"
 grep -q 'Технический JSON runtime-конфигурации' "$VIEW"
 grep -q '<id>settings.dns.fakeIpRange</id>' "$FORM"
 grep -Fq '<fakeIpRange type=".\FakeIpRangeField">' "$MODEL"
@@ -53,4 +59,4 @@ if grep -q '\.html(' "$VIEW"; then
     exit 1
 fi
 
-echo "Разделение сохранения, FakeIP/policy preview и apply в MVC WebUI проверено"
+echo "Разделение сохранения, policy preview и apply в MVC WebUI проверено"
