@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php';
 require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php';
+require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php';
 require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php';
 
 use OPNsense\SingBox\Runtime\RuntimeConfigBuilder;
@@ -46,6 +47,9 @@ assertSameValue(55353, $basePlan['config']['inbounds'][1]['listen_port'], 'По�
 assertSameValue('hijack-dns', $basePlan['config']['route']['rules'][0]['action'], 'DNS hijack action');
 assertSameValue([], $basePlan['selectors']['source_ip_cidr'], 'Базовый план не должен содержать скомпилированные адреса клиентов');
 assertSameValue('198.18.0.0/15', $basePlan['policy_plan']['fakeip_ipv4_range'], 'Базовый диапазон FakeIP');
+assertSameValue(1, $basePlan['policy_plan']['schema_version'], 'Версия декларативного policy-плана');
+assertSameValue(false, $basePlan['policy_plan']['required'], 'Базовый policy-план не должен требовать изменений OPNsense');
+assertSameValue([], $basePlan['policy_plan']['operations'], 'Базовый policy-план не должен содержать операций OPNsense');
 
 $encoded = RuntimeConfigBuilder::encodeConfig($basePlan);
 $decoded = json_decode($encoded, true);
@@ -89,6 +93,10 @@ assertSameValue(['A'], $selectionPlan['policy_plan']['dns_query_types'], 'Тип
 assertSameValue(true, $selectionPlan['policy_plan']['requires_opnsense_dns_redirect'], 'Требование DNS redirect OPNsense');
 assertSameValue(true, $selectionPlan['policy_plan']['requires_opnsense_fakeip_route'], 'Требование FakeIP route OPNsense');
 assertSameValue(true, $selectionPlan['policy_plan']['requires_policy_outbound'], 'Требование policy outbound');
+assertSameValue(false, $selectionPlan['policy_plan']['ready'], 'Policy-план должен оставаться неготовым до настройки outbound');
+assertSameValue('127.0.0.1', $selectionPlan['policy_plan']['dns_redirect']['target_address'], 'Целевой адрес DNS redirect');
+assertSameValue(55353, $selectionPlan['policy_plan']['dns_redirect']['target_port'], 'Целевой порт DNS redirect');
+assertSameValue(3, count($selectionPlan['policy_plan']['operations']), 'Количество декларативных операций policy-плана');
 
 $fakeipServer = $selectionPlan['config']['dns']['servers'][1] ?? null;
 if (!is_array($fakeipServer)) {
@@ -123,6 +131,7 @@ $missingClientsPlan = RuntimeConfigBuilder::build([
     'tun' => [],
 ]);
 assertSameValue(false, $missingClientsPlan['apply_ready'], 'Selected mode без клиентов должен блокировать применение');
+assertSameValue(false, $missingClientsPlan['policy_plan']['dns_redirect']['ready'], 'Selected mode без клиентов должен блокировать декларативный DNS redirect');
 if (isset($missingClientsPlan['config']['dns']['rules'])) {
     failTest('Selected mode без клиентов не должен формировать небезопасное DNS/FakeIP правило без source filter.');
 }
@@ -133,6 +142,7 @@ $allLanPlan = RuntimeConfigBuilder::build([
     'tun' => [],
 ]);
 assertSameValue(false, $allLanPlan['apply_ready'], 'Режим all_lan должен блокировать применение до генерации правил OPNsense');
+assertSameValue(true, $allLanPlan['policy_plan']['confirmation_required'], 'Режим all_lan должен требовать явного подтверждения');
 $allLanDnsRule = $allLanPlan['config']['dns']['rules'][0] ?? null;
 if (!is_array($allLanDnsRule)) {
     failTest('Режим all_lan с доменами должен формировать DNS/FakeIP preview без source filter.');
