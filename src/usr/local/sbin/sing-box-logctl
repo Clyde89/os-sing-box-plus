@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+
+LOG_FILE="${SING_BOX_LOG_FILE:-/var/log/sing-box/sing-box.log}"
+LOG_DIR="$(dirname "$LOG_FILE")"
+
+usage()
+{
+    echo "Использование: $0 clear" >&2
+    exit 64
+}
+
+prepare_log()
+{
+    if [ ! -d "$LOG_DIR" ]; then
+        install -d -o root -g wheel -m 0750 "$LOG_DIR"
+    fi
+
+    touch "$LOG_FILE"
+    chown root:wheel "$LOG_FILE"
+    chmod 0640 "$LOG_FILE"
+}
+
+[ "$#" -eq 1 ] || usage
+
+case "$1" in
+    clear)
+        prepare_log
+        : > "$LOG_FILE"
+        chown root:wheel "$LOG_FILE"
+        chmod 0640 "$LOG_FILE"
+        echo "Журнал sing-box очищен."
+        ;;
+    *)
+        usage
+        ;;
+esac
