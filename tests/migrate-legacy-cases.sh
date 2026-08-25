@@ -130,6 +130,57 @@ cat > "$CURRENT" <<'JSON'
       "if": "igc0",
       "descr": "LAN"
     },
+    "opt9": {
+      "if": "tun_singbox",
+      "descr": "TUN",
+      "enable": "1"
+    }
+  },
+  "filter": {
+    "rule": [
+      {
+        "@attributes": {
+          "uuid": "762b3ec8-79c2-48b4-9793-c653bb3d2265"
+        },
+        "type": "pass",
+        "interface": "opt4",
+        "ipprotocol": "inet",
+        "source": {
+          "network": "opt4"
+        },
+        "destination": {
+          "any": ""
+        },
+        "descr": "sing-box TUN Allow"
+      }
+    ]
+  }
+}
+JSON
+run_migrator "$CURRENT"
+python3 - "$OUTPUT" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], 'r', encoding='utf-8') as fh:
+    config = json.load(fh)
+
+rules = [
+    rule for rule in config['filter']['rule']
+    if rule.get('@attributes', {}).get('uuid') == '762b3ec8-79c2-48b4-9793-c653bb3d2265'
+]
+assert len(rules) == 1, 'существующее legacy-правило не должно дублироваться'
+assert rules[0].get('interface') == 'opt9', 'interface существующего правила не обновлён'
+assert rules[0].get('source', {}).get('network') == 'opt9', 'source.network существующего правила не обновлён'
+PY
+
+cat > "$CURRENT" <<'JSON'
+{
+  "interfaces": {
+    "lan": {
+      "if": "igc0",
+      "descr": "LAN"
+    },
     "opt4": {
       "if": "igc4",
       "descr": "Другой интерфейс"
