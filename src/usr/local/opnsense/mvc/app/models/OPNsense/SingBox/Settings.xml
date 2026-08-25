@@ -1,0 +1,55 @@
+<model>
+    <mount>//OPNsense/SingBox/settings</mount>
+    <description>Основные настройки sing-box</description>
+    <version>1.0.0</version>
+    <items>
+        <capture>
+            <mode type="OptionField">
+                <Default>selected</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <selected>Только выбранные клиенты</selected>
+                    <all_lan>Весь локальный трафик</all_lan>
+                </OptionValues>
+            </mode>
+            <clients type="TextField"/>
+        </capture>
+        <dns>
+            <listenAddress type="NetworkField">
+                <Default>127.0.0.1</Default>
+                <Required>Y</Required>
+                <NetMaskAllowed>N</NetMaskAllowed>
+                <WildcardEnabled>N</WildcardEnabled>
+            </listenAddress>
+            <listenPort type="PortField">
+                <Default>55353</Default>
+                <Required>Y</Required>
+            </listenPort>
+            <redirectDomains type="TextField"/>
+        </dns>
+        <tun>
+            <interfaceName type="TextField">
+                <Default>tun_singbox</Default>
+                <Required>Y</Required>
+                <Mask>/^[A-Za-z0-9_.-]{1,15}$/</Mask>
+                <ValidationMessage>Имя TUN-интерфейса должно содержать от 1 до 15 латинских букв, цифр, точек, дефисов или символов подчёркивания.</ValidationMessage>
+            </interfaceName>
+            <address type="NetworkField">
+                <Default>172.19.0.1/30</Default>
+                <Required>Y</Required>
+                <NetMaskRequired>Y</NetMaskRequired>
+                <WildcardEnabled>N</WildcardEnabled>
+                <ValidationMessage>Укажите корректный адрес TUN-интерфейса с префиксом сети.</ValidationMessage>
+            </address>
+            <stack type="OptionField">
+                <Default>system</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <system>system</system>
+                    <gvisor>gVisor</gvisor>
+                    <mixed>mixed</mixed>
+                </OptionValues>
+            </stack>
+        </tun>
+    </items>
+</model>

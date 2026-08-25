@@ -1,0 +1,55 @@
+<form>
+    <field>
+        <id>settings.capture.mode</id>
+        <label>Режим перенаправления</label>
+        <type>dropdown</type>
+        <help>Безопасный режим по умолчанию обрабатывает только явно выбранных клиентов. Перенаправление всего локального трафика будет доступно только после явного выбора.</help>
+    </field>
+    <field>
+        <id>settings.capture.clients</id>
+        <label>Клиенты для перенаправления</label>
+        <type>textbox</type>
+        <height>8</height>
+        <help>По одному значению на строку. Планируется поддержка отдельных IP-адресов, сетей CIDR и диапазонов адресов. Поле является основой будущего мастера настройки.</help>
+    </field>
+    <field>
+        <id>settings.dns.redirectDomains</id>
+        <label>Домены и DNS-имена для перенаправления</label>
+        <type>textbox</type>
+        <height>8</height>
+        <help>По одному доменному имени на строку. Эти значения будут использоваться для формирования правил policy DNS/FakeIP.</help>
+    </field>
+    <field>
+        <id>settings.dns.listenAddress</id>
+        <label>Адрес DNS-listener</label>
+        <type>text</type>
+        <help>Локальный адрес, на котором sing-box будет принимать DNS-запросы.</help>
+    </field>
+    <field>
+        <id>settings.dns.listenPort</id>
+        <label>Порт DNS-listener</label>
+        <type>text</type>
+        <help>Локальный порт DNS-listener sing-box.</help>
+    </field>
+    <field>
+        <id>settings.tun.interfaceName</id>
+        <label>Имя TUN-интерфейса</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Имя виртуального интерфейса sing-box. Для большинства установок рекомендуется оставить значение по умолчанию.</help>
+    </field>
+    <field>
+        <id>settings.tun.address</id>
+        <label>Адрес TUN-интерфейса</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Локальный адрес TUN-интерфейса с префиксом сети.</help>
+    </field>
+    <field>
+        <id>settings.tun.stack</id>
+        <label>Сетевой стек TUN</label>
+        <type>dropdown</type>
+        <advanced>true</advanced>
+        <help>Для стандартной конфигурации используется системный сетевой стек.</help>
+    </field>
+</form>
