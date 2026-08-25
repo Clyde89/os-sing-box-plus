@@ -23,7 +23,7 @@ final class SelectionValidator
             $items = $value;
         } elseif (is_scalar($value) || (is_object($value) && method_exists($value, '__toString'))) {
             $raw = trim((string)$value);
-            $items = $raw === '' ? [] : preg_split('/[\s,]+/', $raw) ?: [];
+            $items = $raw === '' ? [] : (preg_split('/[\s,]+/', $raw) ?: []);
         } else {
             return ['Список интерфейсов имеет неподдерживаемый формат.'];
         }
