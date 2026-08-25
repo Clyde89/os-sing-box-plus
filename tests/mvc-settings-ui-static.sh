@@ -4,11 +4,15 @@ set -eu
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 CONTROLLER="$ROOT_DIR/src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/SettingsController.php"
 VIEW="$ROOT_DIR/src/usr/local/opnsense/mvc/app/views/OPNsense/SingBox/settings.volt"
+FORM="$ROOT_DIR/src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml"
+MODEL="$ROOT_DIR/src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml"
 ACL="$ROOT_DIR/src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/ACL/ACL.xml"
 API_CONTROLLER="$ROOT_DIR/src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php"
 
 [ -f "$CONTROLLER" ]
 [ -f "$VIEW" ]
+[ -f "$FORM" ]
+[ -f "$MODEL" ]
 [ -f "$ACL" ]
 [ -f "$API_CONTROLLER" ]
 
@@ -27,6 +31,9 @@ grep -q 'Что будет настроено' "$VIEW"
 grep -q 'policySummary' "$VIEW"
 grep -q 'policyRequirements' "$VIEW"
 grep -q 'Технический JSON runtime-конфигурации' "$VIEW"
+grep -q '<id>settings.dns.fakeIpRange</id>' "$FORM"
+grep -Fq '<fakeIpRange type=".\FakeIpRangeField">' "$MODEL"
+grep -q '<Default>198.18.0.0/15</Default>' "$MODEL"
 grep -q "'policy_plan'" "$API_CONTROLLER"
 grep -q 'ui/singbox/\*' "$ACL"
 grep -q 'api/singbox/settings/\*' "$ACL"
@@ -46,4 +53,4 @@ if grep -q '\.html(' "$VIEW"; then
     exit 1
 fi
 
-echo "Разделение сохранения, policy preview и apply в MVC WebUI проверено"
+echo "Разделение сохранения, FakeIP/policy preview и apply в MVC WebUI проверено"
