@@ -40,7 +40,6 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 const SINGBOX_CONFIG_FILE = '/usr/local/etc/sing-box/config.json';
 const SINGBOX_BINARY = '/usr/local/bin/sing-box';
 const CONFIGCTL_BINARY = '/usr/local/sbin/configctl';
-const SINGBOX_LOG_FILE = '/var/log/sing-box/sing-box.log';
 const SETUP_REQUIRED_FILE = '/var/db/os-sing-box/setup-required';
 const STATUS_ENDPOINT = '/sing-box.php?ajax=status';
 const LOGS_ENDPOINT = '/sing-box_log.php';
@@ -214,10 +213,18 @@ function serviceEnabled()
 {
     [$output, $status] = configdAction('enabled');
     if ($status !== 0) {
+        return null;
+    }
+
+    $value = trim(implode("\n", $output));
+    if ($value === 'YES') {
+        return true;
+    }
+    if ($value === 'NO') {
         return false;
     }
 
-    return trim(implode("\n", $output)) === 'YES';
+    return null;
 }
 
 function serviceEnableAction($enable)
@@ -254,8 +261,14 @@ function serviceAction($action)
         return [false, 'Первоначальная настройка sing-box не завершена. Сохраните проверенную конфигурацию перед запуском службы.'];
     }
 
-    if (($action === 'start' || $action === 'restart') && !serviceEnabled()) {
-        return [false, 'Автозапуск sing-box отключён. Включите службу перед запуском или перезапуском.'];
+    if ($action === 'start' || $action === 'restart') {
+        $enabled = serviceEnabled();
+        if ($enabled === null) {
+            return [false, 'Не удалось определить состояние автозапуска sing-box.'];
+        }
+        if (!$enabled) {
+            return [false, 'Автозапуск sing-box отключён. Включите службу перед запуском или перезапуском.'];
+        }
     }
 
     [$output, $status] = configdAction($action);
@@ -270,22 +283,26 @@ function serviceAction($action)
 function serviceStatus()
 {
     [, $status] = configdAction('status');
-    return $status === 0 ? 'running' : 'stopped';
+    if ($status === 0) {
+        return 'running';
+    }
+    if ($status === 1) {
+        return 'stopped';
+    }
+
+    return 'error';
 }
 
 function clearLog()
 {
-    if (!is_file(SINGBOX_LOG_FILE)) {
-        return [true, 'Журнал пока не создан.'];
+    [$output, $status] = configdAction('clearlog');
+    $details = trim(implode("\n", $output));
+
+    if ($status === 0) {
+        return [true, $details !== '' ? $details : 'Журнал sing-box очищен.'];
     }
 
-    if (!is_writable(SINGBOX_LOG_FILE)) {
-        return [false, 'Файл журнала недоступен для записи.'];
-    }
-
-    return file_put_contents(SINGBOX_LOG_FILE, '', LOCK_EX) !== false
-        ? [true, 'Журнал очищен.']
-        : [false, 'Не удалось очистить журнал.'];
+    return [false, 'Не удалось очистить журнал sing-box.' . ($details !== '' ? "\n" . $details : '')];
 }
 
 generateCsrfToken();
@@ -345,6 +362,7 @@ $configContent = readConfig();
 $csrfToken = getCsrfToken();
 $setupRequired = setupRequired();
 $serviceEnabled = serviceEnabled();
+$serviceStateKnown = is_bool($serviceEnabled);
 
 if ($configContent === '' && !is_file(SINGBOX_CONFIG_FILE) && $message === '') {
     $message = 'Рабочая конфигурация отсутствует. Сохраните конфигурацию перед запуском службы.';
@@ -436,7 +454,14 @@ include("fbegin.inc");
                             <span>Получение состояния sing-box</span>
                         </div>
                         <p id="sing-box-autostart" class="singbox-autostart text-muted">
-                            Автозапуск: <?= $serviceEnabled ? '<strong>включён</strong>' : '<strong>отключён</strong>'; ?>
+                            Автозапуск:
+                            <?php if ($serviceEnabled === true): ?>
+                                <strong>включён</strong>
+                            <?php elseif ($serviceEnabled === false): ?>
+                                <strong>отключён</strong>
+                            <?php else: ?>
+                                <strong>состояние неизвестно</strong>
+                            <?php endif; ?>
                         </p>
                     </div>
                 </div>
@@ -448,11 +473,11 @@ include("fbegin.inc");
                     <div class="singbox-body">
                         <form method="post" class="form-inline singbox-toolbar">
                             <input type="hidden" name="csrf_token" value="<?= h($csrfToken); ?>">
-                            <button type="submit" id="enable-autostart" name="action" value="enable_service" class="btn btn-primary"<?= ($setupRequired || $serviceEnabled) ? ' disabled' : ''; ?>><i class="fa fa-toggle-on"></i> Включить автозапуск</button>
-                            <button type="submit" id="disable-autostart" name="action" value="disable_service" class="btn btn-default"<?= !$serviceEnabled ? ' disabled' : ''; ?>><i class="fa fa-toggle-off"></i> Отключить автозапуск</button>
-                            <button type="submit" name="action" value="start" class="btn btn-success"<?= ($setupRequired || !$serviceEnabled) ? ' disabled' : ''; ?>><i class="fa fa-play"></i> Запустить</button>
+                            <button type="submit" id="enable-autostart" name="action" value="enable_service" class="btn btn-primary"<?= ($setupRequired || $serviceEnabled !== false) ? ' disabled' : ''; ?>><i class="fa fa-toggle-on"></i> Включить автозапуск</button>
+                            <button type="submit" id="disable-autostart" name="action" value="disable_service" class="btn btn-default"<?= $serviceEnabled !== true ? ' disabled' : ''; ?>><i class="fa fa-toggle-off"></i> Отключить автозапуск</button>
+                            <button type="submit" name="action" value="start" class="btn btn-success"<?= ($setupRequired || $serviceEnabled !== true) ? ' disabled' : ''; ?>><i class="fa fa-play"></i> Запустить</button>
                             <button type="submit" name="action" value="stop" class="btn btn-danger"><i class="fa fa-stop"></i> Остановить</button>
-                            <button type="submit" name="action" value="restart" class="btn btn-warning"<?= ($setupRequired || !$serviceEnabled) ? ' disabled' : ''; ?>><i class="fa fa-refresh"></i> Перезапустить</button>
+                            <button type="submit" name="action" value="restart" class="btn btn-warning"<?= ($setupRequired || $serviceEnabled !== true) ? ' disabled' : ''; ?>><i class="fa fa-refresh"></i> Перезапустить</button>
                         </form>
                         <p class="singbox-help">Включение автозапуска разрешается только после успешного сохранения проверенной конфигурации.</p>
                     </div>
@@ -522,23 +547,29 @@ include("fbegin.inc");
         }
 
         const autostart = document.getElementById('sing-box-autostart');
-        autostart.innerHTML = enabled ? 'Автозапуск: <strong>включён</strong>' : 'Автозапуск: <strong>отключён</strong>';
+        if (enabled === true) {
+            autostart.innerHTML = 'Автозапуск: <strong>включён</strong>';
+        } else if (enabled === false) {
+            autostart.innerHTML = 'Автозапуск: <strong>отключён</strong>';
+        } else {
+            autostart.innerHTML = 'Автозапуск: <strong>состояние неизвестно</strong>';
+        }
 
         const enableButton = document.getElementById('enable-autostart');
         const disableButton = document.getElementById('disable-autostart');
         if (enableButton) {
-            enableButton.disabled = setupRequired || enabled;
+            enableButton.disabled = setupRequired || enabled !== false;
         }
         if (disableButton) {
-            disableButton.disabled = !enabled;
+            disableButton.disabled = enabled !== true;
         }
     }
 
     function refreshStatus() {
         fetch(STATUS_ENDPOINT, {cache: 'no-store'})
             .then(response => response.json())
-            .then(data => setStatus(data.status, data.setup_required === true, data.enabled === true))
-            .catch(() => setStatus('error', false, false));
+            .then(data => setStatus(data.status, data.setup_required === true, data.enabled))
+            .catch(() => setStatus('error', false, null));
     }
 
     function refreshLogs() {
