@@ -6,15 +6,15 @@ WEBUI="$ROOT_DIR/src/usr/local/www/sing-box.php"
 
 [ -f "$WEBUI" ]
 
-grep -q "const SETUP_REQUIRED_FILE = '/var/db/os-sing-box/setup-required';" "$WEBUI"
+grep -Fq "const SETUP_REQUIRED_FILE = '/var/db/os-sing-box/setup-required';" "$WEBUI"
 grep -q '^function setupRequired()' "$WEBUI"
 grep -q '^function finishInitialSetup()' "$WEBUI"
-grep -q 'chmod($backupFile, 0600)' "$WEBUI"
-grep -q '@unlink($backupFile)' "$WEBUI"
-grep -q "($action === 'start' || $action === 'restart') && setupRequired()" "$WEBUI"
-grep -q "'setup_required' => setupRequired()" "$WEBUI"
+grep -Fq 'chmod($backupFile, 0600)' "$WEBUI"
+grep -Fq '@unlink($backupFile)' "$WEBUI"
+grep -Fq "(\$action === 'start' || \$action === 'restart') && setupRequired()" "$WEBUI"
+grep -Fq "'setup_required' => setupRequired()" "$WEBUI"
 grep -q 'Требуется первоначальная настройка' "$WEBUI"
-grep -q "\$setupRequired ? ' disabled' : ''" "$WEBUI"
+grep -Fq "\$setupRequired ? ' disabled' : ''" "$WEBUI"
 grep -q 'configctl' "$WEBUI"
 
 if grep -q '/usr/sbin/service sing-box' "$WEBUI"; then
