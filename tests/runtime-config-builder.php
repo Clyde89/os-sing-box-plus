@@ -32,6 +32,10 @@ $basePlan = RuntimeConfigBuilder::build([
         'redirectDomains' => '',
         'fakeIpRange' => '198.18.0.0/15',
     ],
+    'policy' => [
+        'outboundMode' => 'direct_bind',
+        'bindAddress' => '',
+    ],
     'tun' => [
         'interfaceName' => 'tun_singbox',
         'address' => '172.19.0.1/30',
@@ -52,6 +56,7 @@ assertSameValue('198.18.0.0/15', $basePlan['policy_plan']['fakeip_ipv4_range'], 
 assertSameValue(1, $basePlan['policy_plan']['schema_version'], 'Версия декларативного policy-плана');
 assertSameValue(false, $basePlan['policy_plan']['required'], 'Базовый policy-план не должен требовать изменений OPNsense');
 assertSameValue([], $basePlan['policy_plan']['operations'], 'Базовый policy-план не должен содержать операций OPNsense');
+assertSameValue(1, count($basePlan['config']['outbounds']), 'Базовый план не должен добавлять policy outbound без доменов');
 
 $encoded = RuntimeConfigBuilder::encodeConfig($basePlan);
 $decoded = json_decode($encoded, true);
@@ -71,6 +76,10 @@ $selectionPlan = RuntimeConfigBuilder::build([
         'redirectDomains' => "Example.org.\n*.Sub.Example.org.\n",
         'fakeIpRange' => '198.20.0.0/16',
     ],
+    'policy' => [
+        'outboundMode' => 'direct_bind',
+        'bindAddress' => '192.0.2.70',
+    ],
     'tun' => [
         'interfaceName' => 'tun_test',
         'address' => '172.20.0.1/30',
@@ -78,7 +87,7 @@ $selectionPlan = RuntimeConfigBuilder::build([
     ],
 ]);
 
-assertSameValue(false, $selectionPlan['apply_ready'], 'План с policy-селекторами должен блокировать применение до подключения policy routing');
+assertSameValue(false, $selectionPlan['apply_ready'], 'План с policy-селекторами должен блокировать применение до подключения правил OPNsense');
 assertSameValue(['lan'], $selectionPlan['selectors']['capture_interfaces'], 'Интерфейсы захвата runtime preview');
 assertSameValue(
     ['192.0.2.10-192.0.2.20', '2001:db8::10'],
@@ -92,13 +101,16 @@ assertSameValue(
 );
 assertSameValue(['example.org'], $selectionPlan['selectors']['domain'], 'Компиляция точных доменов');
 assertSameValue(['.sub.example.org'], $selectionPlan['selectors']['domain_suffix'], 'Компиляция wildcard-доменов');
+assertSameValue('direct_bind', $selectionPlan['selectors']['policy_outbound_mode'], 'Режим policy outbound preview');
+assertSameValue('192.0.2.70', $selectionPlan['selectors']['policy_bind_address'], 'Bind address policy outbound preview');
 assertSameValue(['lan'], $selectionPlan['policy_plan']['capture_interfaces'], 'Интерфейсы захвата policy-плана');
 assertSameValue('198.20.0.0/16', $selectionPlan['policy_plan']['fakeip_ipv4_range'], 'Пользовательский диапазон FakeIP IPv4');
 assertSameValue(['A'], $selectionPlan['policy_plan']['dns_query_types'], 'Типы DNS-запросов FakeIP preview');
 assertSameValue(true, $selectionPlan['policy_plan']['requires_opnsense_dns_redirect'], 'Требование DNS redirect OPNsense');
 assertSameValue(true, $selectionPlan['policy_plan']['requires_opnsense_fakeip_route'], 'Требование FakeIP route OPNsense');
 assertSameValue(true, $selectionPlan['policy_plan']['requires_policy_outbound'], 'Требование policy outbound');
-assertSameValue(false, $selectionPlan['policy_plan']['ready'], 'Policy-план должен оставаться неготовым до настройки outbound');
+assertSameValue(true, $selectionPlan['policy_plan']['ready'], 'Policy-план должен быть готов после настройки source-bound outbound');
+assertSameValue('192.0.2.70', $selectionPlan['policy_plan']['policy_outbound']['bind_address'], 'Bind address декларативного policy outbound');
 assertSameValue('127.0.0.1', $selectionPlan['policy_plan']['dns_redirect']['target_address'], 'Целевой адрес DNS redirect');
 assertSameValue(55353, $selectionPlan['policy_plan']['dns_redirect']['target_port'], 'Целевой порт DNS redirect');
 assertSameValue(3, count($selectionPlan['policy_plan']['operations']), 'Количество декларативных операций policy-плана');
@@ -127,13 +139,40 @@ assertSameValue(
 assertSameValue('route', $dnsRule['action'] ?? null, 'Действие DNS/FakeIP правила');
 assertSameValue('fakeip-dns', $dnsRule['server'] ?? null, 'DNS server правила FakeIP');
 
-if (count($selectionPlan['warnings']) !== 3) {
-    failTest('Policy preview с доменами должен содержать три предупреждения о ещё не подключённых runtime-компонентах.');
+$policyOutbound = $selectionPlan['config']['outbounds'][1] ?? null;
+if (!is_array($policyOutbound)) {
+    failTest('Настроенный policy plan должен формировать отдельный outbound.');
 }
+assertSameValue('direct', $policyOutbound['type'] ?? null, 'Тип policy outbound');
+assertSameValue('policy-out', $policyOutbound['tag'] ?? null, 'Тег policy outbound');
+assertSameValue('192.0.2.70', $policyOutbound['inet4_bind_address'] ?? null, 'Source bind policy outbound');
+
+$policyRouteRule = $selectionPlan['config']['route']['rules'][1] ?? null;
+if (!is_array($policyRouteRule)) {
+    failTest('Настроенный policy plan должен формировать маршрут FakeIP в policy outbound.');
+}
+assertSameValue(['198.20.0.0/16'], $policyRouteRule['ip_cidr'] ?? null, 'FakeIP CIDR route rule');
+assertSameValue('route', $policyRouteRule['action'] ?? null, 'Действие route rule policy outbound');
+assertSameValue('policy-out', $policyRouteRule['outbound'] ?? null, 'Целевой outbound route rule');
+
+if (count($selectionPlan['warnings']) !== 2) {
+    failTest('Policy preview с настроенным outbound должен содержать два предупреждения о ещё не подключённых компонентах OPNsense/IPv6.');
+}
+
+$missingOutboundPlan = RuntimeConfigBuilder::build([
+    'capture' => ['mode' => 'selected', 'interfaces' => 'lan', 'clients' => '192.0.2.10'],
+    'dns' => ['redirectDomains' => 'example.org'],
+    'policy' => ['outboundMode' => 'direct_bind', 'bindAddress' => ''],
+    'tun' => [],
+]);
+assertSameValue(false, $missingOutboundPlan['apply_ready'], 'Policy preview без bind address должен блокировать применение');
+assertSameValue(false, $missingOutboundPlan['policy_plan']['policy_outbound']['ready'], 'Policy plan без bind address должен оставаться неготовым');
+assertSameValue(1, count($missingOutboundPlan['config']['outbounds']), 'Без bind address не должен формироваться небезопасный policy outbound');
 
 $missingClientsPlan = RuntimeConfigBuilder::build([
     'capture' => ['mode' => 'selected', 'interfaces' => 'lan', 'clients' => ''],
     'dns' => ['redirectDomains' => 'example.org'],
+    'policy' => ['bindAddress' => '192.0.2.70'],
     'tun' => [],
 ]);
 assertSameValue(false, $missingClientsPlan['apply_ready'], 'Selected mode без клиентов должен блокировать применение');
@@ -145,6 +184,7 @@ if (isset($missingClientsPlan['config']['dns']['rules'])) {
 $missingInterfacesPlan = RuntimeConfigBuilder::build([
     'capture' => ['mode' => 'selected', 'interfaces' => '', 'clients' => '192.0.2.10'],
     'dns' => ['redirectDomains' => 'example.org'],
+    'policy' => ['bindAddress' => '192.0.2.70'],
     'tun' => [],
 ]);
 assertSameValue(false, $missingInterfacesPlan['apply_ready'], 'Policy preview без интерфейсов должен блокировать применение');
@@ -156,6 +196,7 @@ if (!isset($missingInterfacesPlan['config']['dns']['rules'][0])) {
 $allLanPlan = RuntimeConfigBuilder::build([
     'capture' => ['mode' => 'all_lan', 'interfaces' => ['lan', 'opt1']],
     'dns' => ['redirectDomains' => 'example.org'],
+    'policy' => ['bindAddress' => '192.0.2.70'],
     'tun' => [],
 ]);
 assertSameValue(false, $allLanPlan['apply_ready'], 'Режим all_lan должен блокировать применение до генерации правил OPNsense');
@@ -198,14 +239,30 @@ if (!$invalidRangeRejected) {
     failTest('Runtime builder должен отклонять FakeIP-сеть с host-битами.');
 }
 
+$invalidBindRejected = false;
+try {
+    RuntimeConfigBuilder::build([
+        'capture' => ['mode' => 'selected'],
+        'dns' => [],
+        'policy' => ['bindAddress' => '2001:db8::10'],
+        'tun' => [],
+    ]);
+} catch (RuntimeException $error) {
+    $invalidBindRejected = true;
+}
+if (!$invalidBindRejected) {
+    failTest('Runtime builder должен отклонять IPv6 в IPv4 bind address policy outbound.');
+}
+
 $wrappedPlan = RuntimeConfigBuilder::build([
     'settings' => [
         'capture' => ['mode' => 'selected', 'interfaces' => 'lan,opt1'],
         'dns' => ['listenPort' => '5353'],
+        'policy' => ['outboundMode' => 'direct_bind'],
         'tun' => [],
     ],
 ]);
 assertSameValue(5353, $wrappedPlan['config']['inbounds'][1]['listen_port'], 'Поддержка корневого узла settings');
 assertSameValue(['lan', 'opt1'], $wrappedPlan['selectors']['capture_interfaces'], 'Разбор списка интерфейсов из строки MVC');
 
-echo "Предварительный рендер runtime-конфигурации с интерфейсами захвата проверен\n";
+echo "Предварительный рендер runtime-конфигурации с source-bound policy outbound проверен\n";
