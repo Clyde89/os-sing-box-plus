@@ -34,6 +34,7 @@ jobs:
           test -f tests/service-config.sh
           test -f tests/log-control.sh
           test -f tests/selection-validator.php
+          test -f tests/runtime-config-builder.php
           test -f tests/stubs/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
@@ -47,6 +48,7 @@ jobs:
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/DomainListField.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/ClientListField.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
           test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           test -f src/usr/local/share/licenses/os-sing-box/LICENSE.plugin
@@ -81,6 +83,8 @@ jobs:
           grep -q '<Default>selected</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<id>settings.capture.clients</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q '<id>settings.dns.redirectDomains</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q 'function previewAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          grep -q "'apply_ready'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           if grep -q '/releases/latest/' build.sh; then
             echo 'Обнаружена плавающая ссылка releases/latest' >&2
             exit 1
@@ -192,3 +196,9 @@ jobs:
         run: |
           set -euo pipefail
           php tests/selection-validator.php
+
+      - name: Проверка предварительного рендера runtime-конфигурации
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/runtime-config-builder.php
