@@ -4,6 +4,8 @@ namespace OPNsense\SingBox\Runtime;
 
 final class RuntimeConfigBuilder
 {
+    private const FAKEIP_IPV4_RANGE = '198.18.0.0/15';
+
     public static function build(array $nodes): array
     {
         if (isset($nodes['settings']) && is_array($nodes['settings'])) {
@@ -23,21 +25,83 @@ final class RuntimeConfigBuilder
         $tunAddress = self::stringValue($tun['address'] ?? '172.19.0.1/30');
         $tunStack = self::stringValue($tun['stack'] ?? 'system');
 
+        $compiledClients = SelectorCompiler::compileClients($clients);
+        $compiledDomains = SelectorCompiler::compileDomains($redirectDomains);
+
+        $dnsServers = [
+            [
+                'type' => 'local',
+                'tag' => 'local-dns',
+            ],
+        ];
+        $dnsRules = [];
+        $warnings = [];
+
+        if (!in_array($captureMode, ['selected', 'all_lan'], true)) {
+            $warnings[] = 'Выбран неподдерживаемый режим захвата трафика.';
+        }
+
+        if ($redirectDomains !== []) {
+            $dnsServers[] = [
+                'type' => 'fakeip',
+                'tag' => 'fakeip-dns',
+                'inet4_range' => self::FAKEIP_IPV4_RANGE,
+            ];
+
+            $dnsRule = [
+                'query_type' => ['A'],
+            ];
+            if ($compiledDomains['domain'] !== []) {
+                $dnsRule['domain'] = $compiledDomains['domain'];
+            }
+            if ($compiledDomains['domain_suffix'] !== []) {
+                $dnsRule['domain_suffix'] = $compiledDomains['domain_suffix'];
+            }
+
+            $dnsRuleReady = true;
+            if ($captureMode === 'selected') {
+                if ($compiledClients === []) {
+                    $warnings[] = 'Для режима выбранных клиентов необходимо указать хотя бы один IP-адрес, CIDR или диапазон.';
+                    $dnsRuleReady = false;
+                } else {
+                    $dnsRule['source_ip_cidr'] = $compiledClients;
+                }
+            } elseif ($captureMode !== 'all_lan') {
+                $dnsRuleReady = false;
+            }
+
+            if ($dnsRuleReady) {
+                $dnsRule['action'] = 'route';
+                $dnsRule['server'] = 'fakeip-dns';
+                $dnsRules[] = $dnsRule;
+            }
+
+            $warnings[] = 'Селекторы доменов уже компилируются в DNS/FakeIP preview, но policy outbound ещё не подключён.';
+            $warnings[] = 'Правила перенаправления DNS и FakeIP-трафика на стороне OPNsense ещё не применяются автоматически.';
+            $warnings[] = 'Текущий FakeIP preview обрабатывает только A-запросы; IPv6 policy routing будет добавлен отдельно.';
+        } elseif ($clients !== []) {
+            $warnings[] = 'Список клиентов задан, но список доменов пуст; policy-маршрутизация пока не формируется.';
+        }
+
+        if ($captureMode === 'all_lan') {
+            $warnings[] = 'Режим всего локального трафика требует отдельного подтверждения и ещё не подключён к правилам OPNsense.';
+        }
+
+        $dnsConfig = [
+            'servers' => $dnsServers,
+            'final' => 'local-dns',
+        ];
+        if ($dnsRules !== []) {
+            $dnsConfig['rules'] = $dnsRules;
+        }
+
         $config = [
             'log' => [
                 'disabled' => false,
                 'level' => 'info',
                 'timestamp' => true,
             ],
-            'dns' => [
-                'servers' => [
-                    [
-                        'type' => 'local',
-                        'tag' => 'local-dns',
-                    ],
-                ],
-                'final' => 'local-dns',
-            ],
+            'dns' => $dnsConfig,
             'inbounds' => [
                 [
                     'type' => 'tun',
@@ -72,23 +136,26 @@ final class RuntimeConfigBuilder
             ],
         ];
 
-        $warnings = [];
-        if ($captureMode === 'all_lan') {
-            $warnings[] = 'Режим перенаправления всего локального трафика ещё не подключён к генерации правил захвата.';
-        }
-        if ($clients !== []) {
-            $warnings[] = 'Список клиентов сохранён в MVC-модели, но ещё не подключён к генерации правил захвата.';
-        }
-        if ($redirectDomains !== []) {
-            $warnings[] = 'Список доменов сохранён в MVC-модели, но ещё не подключён к policy routing и FakeIP.';
-        }
-
         return [
             'config' => $config,
             'selectors' => [
                 'capture_mode' => $captureMode,
                 'clients' => $clients,
                 'redirect_domains' => $redirectDomains,
+                'source_ip_cidr' => $compiledClients,
+                'domain' => $compiledDomains['domain'],
+                'domain_suffix' => $compiledDomains['domain_suffix'],
+            ],
+            'policy_plan' => [
+                'capture_mode' => $captureMode,
+                'source_ip_cidr' => $compiledClients,
+                'domain' => $compiledDomains['domain'],
+                'domain_suffix' => $compiledDomains['domain_suffix'],
+                'fakeip_ipv4_range' => self::FAKEIP_IPV4_RANGE,
+                'dns_query_types' => ['A'],
+                'requires_opnsense_dns_redirect' => $redirectDomains !== [],
+                'requires_opnsense_fakeip_route' => $redirectDomains !== [],
+                'requires_policy_outbound' => $redirectDomains !== [],
             ],
             'warnings' => $warnings,
             'apply_ready' => $warnings === [],
