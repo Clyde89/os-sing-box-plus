@@ -27,12 +27,17 @@ assertValid(
 assertInvalid(SelectionValidator::validateDomains("https://example.org\n"), 'URL вместо домена');
 assertInvalid(SelectionValidator::validateDomains("*example.org\n"), 'Некорректный wildcard');
 assertInvalid(SelectionValidator::validateDomains("Example.org\nexample.org\n"), 'Повтор домена');
+assertInvalid(SelectionValidator::validateDomains("example..org\n"), 'Некорректная структура домена');
 
 assertValid(
     SelectionValidator::validateClients(
         "192.0.2.10\n2001:db8::10\n192.0.2.0/24\n2001:db8::/64\n192.0.2.10-192.0.2.20\n2001:db8::10-2001:db8::20\n"
     ),
     'Корректные клиенты'
+);
+assertValid(
+    SelectionValidator::validateClients("192.0.2.10 - 192.0.2.20\n"),
+    'Диапазон с пробелами'
 );
 assertInvalid(SelectionValidator::validateClients("192.0.2.10/99\n"), 'Некорректный IPv4 CIDR');
 assertInvalid(SelectionValidator::validateClients("2001:db8::1/129\n"), 'Некорректный IPv6 CIDR');
@@ -41,7 +46,10 @@ assertInvalid(SelectionValidator::validateClients("192.0.2.10-2001:db8::10\n"), 
 assertInvalid(SelectionValidator::validateClients("192.0.2.10\n192.0.2.10\n"), 'Повтор клиента');
 assertInvalid(SelectionValidator::validateClients("client.example.org\n"), 'Домен вместо клиента');
 
-$tooMany = implode("\n", array_fill(0, 4097, '192.0.2.1'));
-assertInvalid(SelectionValidator::validateClients($tooMany), 'Превышение количества элементов');
+$tooManyItems = [];
+for ($index = 0; $index < 4097; $index++) {
+    $tooManyItems[] = sprintf('2001:db8:%x::1', $index);
+}
+assertInvalid(SelectionValidator::validateClients(implode("\n", $tooManyItems)), 'Превышение количества элементов');
 
 echo "Валидация списков доменов и клиентов проверена\n";
