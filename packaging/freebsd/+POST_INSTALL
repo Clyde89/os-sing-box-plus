@@ -15,9 +15,11 @@ RC_STATE_FILE="${MIGRATION_DIR}/sing_box.rc.upgrade"
 LEGACY_CONFIG_SNAPSHOT="${MIGRATION_DIR}/config.xml.legacy"
 LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
 PENDING_FILTER_RELOAD="${MIGRATION_DIR}/filter-reload.pending"
+SETUP_REQUIRED_FILE="${MIGRATION_DIR}/setup-required"
 LEGACY_MIGRATOR="/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php"
 legacy_migration_processed=0
 legacy_migration_failed=0
+fresh_configuration=0
 
 echo "===> Настраивается os-sing-box"
 
@@ -36,6 +38,10 @@ touch "$SING_BOX_LOG"
 chown root:wheel "$SING_BOX_LOG"
 chmod 0640 "$SING_BOX_LOG"
 
+if [ ! -f "$MIGRATION_FILE" ] && [ ! -f "$SING_BOX_CONFIG" ]; then
+    fresh_configuration=1
+fi
+
 if [ -f "$MIGRATION_FILE" ]; then
     echo "===> Восстанавливается пользовательская конфигурация sing-box после обновления"
     install -d -o root -g wheel -m 0700 "$SING_BOX_DIR"
@@ -48,6 +54,13 @@ elif [ ! -f "$SING_BOX_CONFIG" ] && [ -f "$SING_BOX_SAMPLE" ]; then
     install -o root -g wheel -m 0600 "$SING_BOX_SAMPLE" "$SING_BOX_CONFIG"
 elif [ -f "$SING_BOX_CONFIG" ]; then
     chmod 0600 "$SING_BOX_CONFIG"
+fi
+
+if [ "$fresh_configuration" -eq 1 ]; then
+    install -d -o root -g wheel -m 0700 "$MIGRATION_DIR"
+    : > "$SETUP_REQUIRED_FILE"
+    chmod 0600 "$SETUP_REQUIRED_FILE"
+    echo "===> Первоначальная настройка sing-box отмечена как незавершённая"
 fi
 
 if [ -f "$RC_STATE_FILE" ] && ! cmp -s "$RC_STATE_FILE" "$RC_CONF_FILE"; then
