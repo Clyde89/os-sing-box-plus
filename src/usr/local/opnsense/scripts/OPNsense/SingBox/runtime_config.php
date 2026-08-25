@@ -5,6 +5,7 @@ require_once('config.inc');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php');
+require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php');
 
 use OPNsense\SingBox\Runtime\RuntimeConfigBuilder;
