@@ -33,6 +33,7 @@ jobs:
           test -f tests/webui-safety-static.sh
           test -f tests/service-config.sh
           test -f tests/log-control.sh
+          test -f tests/selection-validator.php
           test -f tests/stubs/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
@@ -42,6 +43,12 @@ jobs:
           test -x src/usr/local/sbin/sing-box-service-config
           test -x src/usr/local/sbin/sing-box-logctl
           test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/DomainListField.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/ClientListField.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
+          test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           test -f src/usr/local/share/licenses/os-sing-box/LICENSE.plugin
           test -f src/usr/local/share/licenses/os-sing-box/LICENSE.opnsense
           test -f src/usr/local/share/licenses/os-sing-box/LICENSE.sing-box
@@ -69,6 +76,11 @@ jobs:
           grep -q 'migrate_legacy.php' packaging/freebsd/+POST_INSTALL
           grep -q '762b3ec8-79c2-48b4-9793-c653bb3d2265' src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
           grep -q '"product_version":"1.1.0"' src/usr/local/opnsense/version/sing-box
+          grep -Fq '<clients type=".\ClientListField"/>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -Fq '<redirectDomains type=".\DomainListField"/>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<Default>selected</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<id>settings.capture.clients</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q '<id>settings.dns.redirectDomains</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           if grep -q '/releases/latest/' build.sh; then
             echo 'Обнаружена плавающая ссылка releases/latest' >&2
             exit 1
@@ -174,3 +186,9 @@ jobs:
           while IFS= read -r -d '' file; do
             php -l "$file"
           done < <(find src tests -type f -name '*.php' -print0)
+
+      - name: Проверка валидации доменов и клиентов
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/selection-validator.php
