@@ -14,6 +14,7 @@ MIGRATION_FILE="${MIGRATION_DIR}/config.json.upgrade"
 RC_STATE_FILE="${MIGRATION_DIR}/sing_box.rc.upgrade"
 LEGACY_CONFIG_SNAPSHOT="${MIGRATION_DIR}/config.xml.legacy"
 LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
+PENDING_FILTER_RELOAD="${MIGRATION_DIR}/filter-reload.pending"
 LEGACY_MIGRATOR="/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php"
 legacy_migration_processed=0
 legacy_migration_failed=0
@@ -88,11 +89,16 @@ fi
 
 if [ "$legacy_migration_processed" -eq 1 ] && [ "$legacy_migration_failed" -eq 0 ]; then
     if grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE" 2>/dev/null; then
-        if ! configctl filter reload >/dev/null 2>&1; then
+        if configctl filter reload >/dev/null 2>&1; then
+            rm -f "$PENDING_FILTER_RELOAD"
+        else
             legacy_migration_failed=1
             echo "Ошибка: не удалось применить восстановленные правила firewall; миграционные данные сохранены" >&2
         fi
     else
+        install -d -o root -g wheel -m 0700 "$MIGRATION_DIR"
+        : > "$PENDING_FILTER_RELOAD"
+        chmod 0600 "$PENDING_FILTER_RELOAD"
         echo "===> Применение восстановленных правил firewall отложено до запуска sing-box"
     fi
 fi
