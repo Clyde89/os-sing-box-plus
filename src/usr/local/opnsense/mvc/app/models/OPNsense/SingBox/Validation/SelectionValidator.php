@@ -72,7 +72,7 @@ final class SelectionValidator
         }
 
         if (filter_var($candidate, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false) {
-            return 'укажите корректное доменное имя; для IDN используйте punycode.';
+            return 'укажите корректное доменное имя; для IDN требуется запись в формате punycode.';
         }
 
         return null;
