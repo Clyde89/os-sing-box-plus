@@ -2,9 +2,11 @@
 
 namespace OPNsense\SingBox\Runtime;
 
+use OPNsense\SingBox\Validation\SelectionValidator;
+
 final class RuntimeConfigBuilder
 {
-    private const FAKEIP_IPV4_RANGE = '198.18.0.0/15';
+    private const DEFAULT_FAKEIP_IPV4_RANGE = '198.18.0.0/15';
 
     public static function build(array $nodes): array
     {
@@ -21,9 +23,16 @@ final class RuntimeConfigBuilder
         $redirectDomains = self::splitLines(self::stringValue($dns['redirectDomains'] ?? ''));
         $dnsListenAddress = self::stringValue($dns['listenAddress'] ?? '127.0.0.1');
         $dnsListenPort = self::intValue($dns['listenPort'] ?? 55353, 55353);
+        $fakeIpRange = self::stringValue($dns['fakeIpRange'] ?? self::DEFAULT_FAKEIP_IPV4_RANGE);
         $tunInterface = self::stringValue($tun['interfaceName'] ?? 'tun_singbox');
         $tunAddress = self::stringValue($tun['address'] ?? '172.19.0.1/30');
         $tunStack = self::stringValue($tun['stack'] ?? 'system');
+
+        if ($fakeIpRange === '') {
+            $fakeIpRange = self::DEFAULT_FAKEIP_IPV4_RANGE;
+        }
+
+        self::validateStructuredInput($captureMode, $clients, $redirectDomains, $fakeIpRange);
 
         $compiledClients = SelectorCompiler::compileClients($clients);
         $compiledDomains = SelectorCompiler::compileDomains($redirectDomains);
@@ -37,15 +46,11 @@ final class RuntimeConfigBuilder
         $dnsRules = [];
         $warnings = [];
 
-        if (!in_array($captureMode, ['selected', 'all_lan'], true)) {
-            $warnings[] = 'Выбран неподдерживаемый режим захвата трафика.';
-        }
-
         if ($redirectDomains !== []) {
             $dnsServers[] = [
                 'type' => 'fakeip',
                 'tag' => 'fakeip-dns',
-                'inet4_range' => self::FAKEIP_IPV4_RANGE,
+                'inet4_range' => $fakeIpRange,
             ];
 
             $dnsRule = [
@@ -66,8 +71,6 @@ final class RuntimeConfigBuilder
                 } else {
                     $dnsRule['source_ip_cidr'] = $compiledClients;
                 }
-            } elseif ($captureMode !== 'all_lan') {
-                $dnsRuleReady = false;
             }
 
             if ($dnsRuleReady) {
@@ -151,7 +154,7 @@ final class RuntimeConfigBuilder
                 'source_ip_cidr' => $compiledClients,
                 'domain' => $compiledDomains['domain'],
                 'domain_suffix' => $compiledDomains['domain_suffix'],
-                'fakeip_ipv4_range' => self::FAKEIP_IPV4_RANGE,
+                'fakeip_ipv4_range' => $fakeIpRange,
                 'dns_query_types' => ['A'],
                 'requires_opnsense_dns_redirect' => $redirectDomains !== [],
                 'requires_opnsense_fakeip_route' => $redirectDomains !== [],
@@ -174,6 +177,27 @@ final class RuntimeConfigBuilder
         }
 
         return $json . PHP_EOL;
+    }
+
+    private static function validateStructuredInput(
+        string $captureMode,
+        array $clients,
+        array $redirectDomains,
+        string $fakeIpRange
+    ): void {
+        if (!in_array($captureMode, ['selected', 'all_lan'], true)) {
+            throw new \RuntimeException('MVC-модель содержит неподдерживаемый режим перенаправления.');
+        }
+
+        $messages = array_merge(
+            SelectionValidator::validateClients(implode("\n", $clients)),
+            SelectionValidator::validateDomains(implode("\n", $redirectDomains)),
+            SelectionValidator::validateIpv4Network($fakeIpRange)
+        );
+
+        if ($messages !== []) {
+            throw new \RuntimeException('MVC-модель содержит некорректные структурированные настройки: ' . implode(' ', $messages));
+        }
     }
 
     private static function splitLines(string $value): array
