@@ -22,6 +22,8 @@ const STATE_DIRECTORY = '/var/db/os-sing-box';
 const APPLY_LOCK_FILE = STATE_DIRECTORY . '/apply.lock';
 const SETUP_REQUIRED_FILE = STATE_DIRECTORY . '/setup-required';
 const MANAGED_CONFIG_FILE = STATE_DIRECTORY . '/managed-config';
+const ADOPTION_APPROVAL_FILE = STATE_DIRECTORY . '/adoption-approved';
+const UNMANAGED_ORIGINAL_FILE = STATE_DIRECTORY . '/unmanaged-config.original.json';
 const MANAGED_POLICY_FILE = STATE_DIRECTORY . '/managed-policy';
 const POLICY_PLAN_FILE = STATE_DIRECTORY . '/policy-plan.json';
 const POLICY_RELOAD_PENDING_FILE = STATE_DIRECTORY . '/filter-reload.pending';
@@ -147,12 +149,78 @@ function capturePolicyState(): array
     return [
         SETUP_REQUIRED_FILE => snapshotStateFile(SETUP_REQUIRED_FILE),
         MANAGED_CONFIG_FILE => snapshotStateFile(MANAGED_CONFIG_FILE),
+        ADOPTION_APPROVAL_FILE => snapshotStateFile(ADOPTION_APPROVAL_FILE),
         POLICY_PLAN_FILE => snapshotStateFile(POLICY_PLAN_FILE),
         MANAGED_POLICY_FILE => snapshotStateFile(MANAGED_POLICY_FILE),
         POLICY_RELOAD_PENDING_FILE => snapshotStateFile(POLICY_RELOAD_PENDING_FILE),
         TUN_INTERFACE_FILE => snapshotStateFile(TUN_INTERFACE_FILE),
         POLICY_ACTIVE_FILE => snapshotStateFile(POLICY_ACTIVE_FILE),
     ];
+}
+
+function currentConfigSha256(): string
+{
+    if (!is_readable(TARGET_CONFIG)) {
+        raiseRuntime('Существующая runtime-конфигурация недоступна для проверки перехода.', 65);
+    }
+
+    $checksum = hash_file('sha256', TARGET_CONFIG);
+    if (!is_string($checksum) || preg_match('/^[a-f0-9]{64}$/', $checksum) !== 1) {
+        raiseRuntime('Не удалось вычислить SHA-256 существующей runtime-конфигурации.', 74);
+    }
+    return $checksum;
+}
+
+function adoptionApprovalMatchesCurrentConfig(): bool
+{
+    if (!is_file(ADOPTION_APPROVAL_FILE) || !is_readable(ADOPTION_APPROVAL_FILE) || !is_file(TARGET_CONFIG)) {
+        return false;
+    }
+
+    $approvedChecksum = trim((string)file_get_contents(ADOPTION_APPROVAL_FILE));
+    if (preg_match('/^[a-f0-9]{64}$/', $approvedChecksum) !== 1) {
+        return false;
+    }
+
+    return hash_equals($approvedChecksum, currentConfigSha256());
+}
+
+function approveManagedAdoption(): string
+{
+    if (is_file(SETUP_REQUIRED_FILE)) {
+        raiseRuntime('Первоначальная настройка уже допускает безопасное применение без перехода.', 65);
+    }
+    if (is_file(MANAGED_CONFIG_FILE)) {
+        raiseRuntime('Runtime-конфигурация уже управляется структурированными настройками.', 65);
+    }
+    if (!is_file(TARGET_CONFIG)) {
+        raiseRuntime('Существующая runtime-конфигурация для перехода не найдена.', 65);
+    }
+
+    $content = file_get_contents(TARGET_CONFIG);
+    if (!is_string($content)) {
+        raiseRuntime('Не удалось прочитать существующую runtime-конфигурацию для резервного копирования.', 74);
+    }
+
+    $checksum = hash('sha256', $content);
+    if (!hash_equals($checksum, currentConfigSha256())) {
+        raiseRuntime('Runtime-конфигурация изменилась во время подтверждения перехода.', 75);
+    }
+
+    if (!is_file(UNMANAGED_ORIGINAL_FILE)) {
+        writeStateFile(UNMANAGED_ORIGINAL_FILE, $content);
+    } elseif (!is_readable(UNMANAGED_ORIGINAL_FILE)) {
+        raiseRuntime('Исходная резервная копия unmanaged-конфигурации недоступна.', 74);
+    }
+    if (!@chmod(UNMANAGED_ORIGINAL_FILE, 0400)) {
+        raiseRuntime('Не удалось защитить исходную резервную копию unmanaged-конфигурации.', 74);
+    }
+
+    if (!hash_equals($checksum, currentConfigSha256())) {
+        raiseRuntime('Runtime-конфигурация изменилась до записи разрешения перехода.', 75);
+    }
+    writeStateFile(ADOPTION_APPROVAL_FILE, $checksum . PHP_EOL);
+    return $checksum;
 }
 
 function restorePolicyState(array $snapshot): void
@@ -361,18 +429,28 @@ $serviceRunningBeforeApply = false;
 $backupFile = TARGET_CONFIG . '.bak';
 
 try {
-    if ($argc !== 2 || $argv[1] !== 'apply') {
-        raiseRuntime('Поддерживается только действие apply.', 64);
+    if ($argc !== 2 || !in_array($argv[1], ['apply', 'approve-adoption'], true)) {
+        raiseRuntime('Поддерживаются только действия apply и approve-adoption.', 64);
     }
 
     $lockHandle = acquireApplyLock();
+    if ($argv[1] === 'approve-adoption') {
+        $approvedChecksum = approveManagedAdoption();
+        releaseApplyLock($lockHandle);
+        $lockHandle = null;
+        echo 'OK Переход в управляемый режим подтверждён; исходная runtime-конфигурация сохранена.'
+            . ' SHA256=' . $approvedChecksum . PHP_EOL;
+        exit(0);
+    }
+
     $hadPreviousConfig = is_file(TARGET_CONFIG);
     $initialSetup = is_file(SETUP_REQUIRED_FILE);
     $managedConfig = is_file(MANAGED_CONFIG_FILE);
+    $adoptionApproved = adoptionApprovalMatchesCurrentConfig();
 
-    if ($hadPreviousConfig && !$initialSetup && !$managedConfig) {
+    if ($hadPreviousConfig && !$initialSetup && !$managedConfig && !$adoptionApproved) {
         raiseRuntime(
-            'Обнаружена существующая пользовательская конфигурация, не управляемая MVC. Применение структурированных настроек заблокировано до явного перехода в управляемый режим.',
+            'Обнаружена существующая пользовательская конфигурация, не управляемая MVC. Применение заблокировано до подтверждения перехода для её текущей SHA-256.',
             65
         );
     }
@@ -416,6 +494,10 @@ try {
     validateRuntimeConfig($tempFile);
     $serviceRunningBeforeApply = serviceWasRunning();
 
+    if ($adoptionApproved && !adoptionApprovalMatchesCurrentConfig()) {
+        raiseRuntime('Runtime-конфигурация изменилась после подтверждения перехода.', 75);
+    }
+
     if ($hadPreviousConfig) {
         if (!@copy(TARGET_CONFIG, $backupFile)) {
             raiseRuntime('Не удалось создать резервную копию текущей runtime-конфигурации.', 74);
@@ -440,6 +522,10 @@ try {
 
     $policySha256 = applyPolicyState($plan);
     ensureManagedState();
+
+    if (is_file(ADOPTION_APPROVAL_FILE) && !@unlink(ADOPTION_APPROVAL_FILE)) {
+        raiseRuntime('Не удалось завершить переход в управляемый режим.', 74);
+    }
 
     if ($initialSetup && !@unlink(SETUP_REQUIRED_FILE)) {
         raiseRuntime('Не удалось завершить первоначальную настройку.', 74);

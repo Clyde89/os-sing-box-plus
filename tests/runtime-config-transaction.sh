@@ -194,6 +194,62 @@ run_apply()
     set -e
 }
 
+run_adoption()
+{
+    set +e
+    RUNTIME_TEST_MODEL="$SCENARIO_MODEL" \
+        MOCK_SERVICE_STATUS=1 \
+        MOCK_RESTART_COUNT="$SCENARIO_DIR/restart.count" \
+        MOCK_STATE_DIR="$SCENARIO_STATE" \
+        MOCK_ACTIVE_FILE="$SCENARIO_ACTIVE" \
+        php -d "include_path=$STUB_DIR" "$SCENARIO_SCRIPT" approve-adoption \
+        > "$SCENARIO_STDOUT" 2> "$SCENARIO_STDERR"
+    ADOPTION_STATUS=$?
+    set -e
+}
+
+test_unmanaged_adoption_success()
+{
+    prepare_scenario adoption-success
+    printf '{"state":"unmanaged-original"}\n' > "$SCENARIO_CONFIG"
+    cp "$SCENARIO_CONFIG" "$SCENARIO_DIR/expected-config.json"
+
+    run_adoption
+    [ "$ADOPTION_STATUS" -eq 0 ] || fail "подтверждение managed-перехода завершилось кодом $ADOPTION_STATUS"
+    assert_equal "$SCENARIO_DIR/expected-config.json" "$SCENARIO_CONFIG"
+    assert_equal "$SCENARIO_DIR/expected-config.json" "$SCENARIO_STATE/unmanaged-config.original.json"
+    [ "$(stat -c '%a' "$SCENARIO_STATE/unmanaged-config.original.json")" = "400" ] || fail "исходная unmanaged-копия получила небезопасные права"
+    expected_checksum="$(sha256sum "$SCENARIO_CONFIG" | awk '{print $1}')"
+    [ "$(cat "$SCENARIO_STATE/adoption-approved")" = "$expected_checksum" ] || fail "разрешение managed-перехода не связано с SHA-256"
+    [ "$(restart_count)" -eq 0 ] || fail "подтверждение перехода изменило состояние службы"
+
+    run_apply 0
+    [ "$APPLY_STATUS" -eq 0 ] || fail "подтверждённый managed-переход завершился кодом $APPLY_STATUS"
+    assert_file "$SCENARIO_STATE/managed-config"
+    assert_absent "$SCENARIO_STATE/adoption-approved"
+    assert_equal "$SCENARIO_DIR/expected-config.json" "$SCENARIO_STATE/unmanaged-config.original.json"
+    assert_log '"policy-dns-bootstrap"' "$SCENARIO_CONFIG"
+    [ "$(restart_count)" -eq 1 ] || fail "managed-переход не выполнил один контролируемый restart"
+}
+
+test_adoption_checksum_invalidation()
+{
+    prepare_scenario adoption-invalidated
+    printf '{"state":"unmanaged-original"}\n' > "$SCENARIO_CONFIG"
+    run_adoption
+    [ "$ADOPTION_STATUS" -eq 0 ] || fail "начальное подтверждение перехода завершилось кодом $ADOPTION_STATUS"
+
+    printf '{"state":"changed-after-approval"}\n' > "$SCENARIO_CONFIG"
+    cp "$SCENARIO_CONFIG" "$SCENARIO_DIR/expected-config.json"
+    run_apply 1
+    [ "$APPLY_STATUS" -eq 65 ] || fail "изменённая unmanaged-конфигурация вернула код $APPLY_STATUS вместо 65"
+    assert_equal "$SCENARIO_DIR/expected-config.json" "$SCENARIO_CONFIG"
+    assert_absent "$SCENARIO_STATE/managed-config"
+    assert_file "$SCENARIO_STATE/adoption-approved"
+    [ "$(restart_count)" -eq 0 ] || fail "несовпадающая SHA-256 привела к перезапуску службы"
+    assert_log 'до подтверждения перехода для её текущей SHA-256' "$SCENARIO_STDERR"
+}
+
 test_running_service_success()
 {
     prepare_scenario running-success
@@ -261,9 +317,11 @@ test_activation_mismatch_rollback()
 }
 
 trap cleanup EXIT HUP INT TERM
+test_unmanaged_adoption_success
+test_adoption_checksum_invalidation
 test_running_service_success
 test_stopped_service_deferred_activation
 test_restart_failure_rollback
 test_activation_mismatch_rollback
 
-echo "Транзакционный Apply, restart и rollback runtime-конфигурации проверены"
+echo "Транзакционный Apply, managed-переход, restart и rollback runtime-конфигурации проверены"

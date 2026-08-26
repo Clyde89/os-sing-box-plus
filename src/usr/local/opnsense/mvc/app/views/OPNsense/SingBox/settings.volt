@@ -14,6 +14,7 @@
             const labels = {
                 initial_setup: 'Первоначальная настройка',
                 managed: 'Управляется структурированными настройками',
+                adoption_ready: 'Переход в управляемый режим подтверждён',
                 empty: 'Рабочая конфигурация ещё не создана',
                 unmanaged_existing: 'Обнаружена существующая пользовательская конфигурация'
             };
@@ -76,6 +77,12 @@
                 : 'Не требуется';
 
             $('#policyManagementState').text(managementStateLabel(data.management_state));
+            const adoptionRequired = data.management_state === 'unmanaged_existing';
+            $('#adoptionPanel').toggleClass('hidden', !adoptionRequired);
+            if (adoptionRequired) {
+                $('#adoptionConfirm').prop('checked', false);
+                $('#adoptAct').prop('disabled', true);
+            }
             $('#policyCaptureMode').text(captureModeLabel(plan.capture_mode));
             $('#policyInterfaces').text(captureInterfaces.length > 0 ? captureInterfaces.join(', ') : 'не выбраны');
             $('#policyClientCount').text(clients.length + ' исходных, ' + compiledClients.length + ' CIDR-селекторов');
@@ -103,6 +110,7 @@
                 $('#runtimeSha').text('');
                 $('#runtimeWarnings').addClass('hidden').text('');
                 $('#policySummary').addClass('hidden');
+                $('#adoptionPanel').addClass('hidden');
                 $('#applyAct').prop('disabled', true);
                 showMessage('danger', data && data.message ? data.message : 'Не удалось сформировать предварительную конфигурацию.');
                 return;
@@ -162,6 +170,21 @@
                 }
             }
         });
+
+        $('#adoptionConfirm').change(function() {
+            $('#adoptAct').prop('disabled', !this.checked);
+        });
+
+        $('#adoptAct').SimpleActionButton({
+            onAction: function(data) {
+                if (data && data.result === 'ok') {
+                    showMessage('success', data.message || 'Переход в управляемый режим подтверждён.');
+                    refreshPreview();
+                } else {
+                    showMessage('danger', data && data.message ? data.message : 'Не удалось подтвердить безопасный переход.');
+                }
+            }
+        });
     });
 </script>
 
@@ -171,6 +194,24 @@
 </div>
 
 <div id="singboxMessage" class="alert alert-info hidden" role="alert"></div>
+
+<div id="adoptionPanel" class="alert alert-warning hidden" role="alert">
+    <strong>Существующая runtime-конфигурация не управляется MVC.</strong>
+    Подтверждение сохраняет защищённую исходную копию и разрешает один переход только для текущей SHA-256.
+    Рабочая конфигурация и служба на этом шаге не изменяются.
+    <div class="checkbox" style="margin-top: 10px;">
+        <label>
+            <input id="adoptionConfirm" type="checkbox">
+            Подтверждена замена текущей конфигурации следующим успешным применением структурированных настроек.
+        </label>
+    </div>
+    <button class="btn btn-warning" id="adoptAct" type="button"
+        data-endpoint="/api/singbox/settings/adopt"
+        data-label="Подтвердить безопасный переход"
+        data-error-title="Ошибка подтверждения перехода"
+        disabled>
+    </button>
+</div>
 
 <div class="col-md-12">
     {{ partial("layout_partials/base_form", ['fields': settingsForm, 'id': 'frmSettings']) }}
