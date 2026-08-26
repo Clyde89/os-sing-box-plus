@@ -22,6 +22,7 @@ jobs:
         run: |
           set -euo pipefail
           test -f build.sh
+          test -f .github/workflows/freebsd-package.yml
           test -d src
           test -d packaging/freebsd
           test -d tests
@@ -38,6 +39,11 @@ jobs:
           test -f tests/package-artifact.sh
           test -x tests/opnsense-regression.sh
           test -f docs/RELEASE-CHECKLIST.md
+          grep -Fq 'release: "15.1"' .github/workflows/freebsd-package.yml
+          grep -Fq 'vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1' .github/workflows/freebsd-package.yml
+          grep -Fq 'make package' .github/workflows/freebsd-package.yml
+          grep -Fq 'pkg info -F dist/os-sing-box.pkg' .github/workflows/freebsd-package.yml
+          grep -Fq 'actions/upload-artifact@v4' .github/workflows/freebsd-package.yml
           test -f tests/webui-safety-static.sh
           test -f tests/service-config.sh
           test -f tests/log-control.sh
