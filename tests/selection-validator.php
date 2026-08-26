@@ -88,6 +88,13 @@ assertInvalid(SelectionValidator::validateIpv4Network('2001:db8::/64'), 'IPv6 в
 assertInvalid(SelectionValidator::validateIpv4Network('198.18.0.0/33'), 'Некорректный префикс FakeIP IPv4');
 assertInvalid(SelectionValidator::validateIpv4Network('198.18.0.0'), 'FakeIP без CIDR-префикса');
 
+assertValid(SelectionValidator::validateIpv4InterfaceAddress('172.19.0.1/30'), 'Корректный IPv4-адрес TUN');
+assertValid(SelectionValidator::validateIpv4InterfaceAddress('172.19.0.1/32'), 'IPv4-адрес TUN с префиксом /32');
+assertInvalid(SelectionValidator::validateIpv4InterfaceAddress('172.19.0.0/30'), 'Адрес сети вместо IPv4-адреса TUN');
+assertInvalid(SelectionValidator::validateIpv4InterfaceAddress('172.19.0.3/30'), 'Broadcast вместо IPv4-адреса TUN');
+assertInvalid(SelectionValidator::validateIpv4InterfaceAddress('172.19.0.1'), 'IPv4-адрес TUN без префикса');
+assertInvalid(SelectionValidator::validateIpv4InterfaceAddress('2001:db8::1/64'), 'IPv6 вместо IPv4-адреса TUN');
+
 $tooManyItems = [];
 for ($index = 0; $index < 4097; $index++) {
     $tooManyItems[] = sprintf('2001:db8:%x::1', $index);

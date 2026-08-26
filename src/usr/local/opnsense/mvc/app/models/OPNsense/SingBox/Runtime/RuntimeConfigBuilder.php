@@ -2,6 +2,8 @@
 
 namespace OPNsense\SingBox\Runtime;
 
+require_once __DIR__ . '/NetworkPreflightValidator.php';
+
 use OPNsense\SingBox\Validation\SelectionValidator;
 
 final class RuntimeConfigBuilder
@@ -52,6 +54,8 @@ final class RuntimeConfigBuilder
             $captureInterfaces,
             $clients,
             $redirectDomains,
+            $dnsListenAddress,
+            $dnsListenPort,
             $fakeIpRange,
             $policyDnsType,
             $policyDnsAddress,
@@ -60,7 +64,10 @@ final class RuntimeConfigBuilder
             $policyDnsPath,
             $policyOutboundMode,
             $policyBindAddress,
-            $policyGateway
+            $policyGateway,
+            $tunInterface,
+            $tunAddress,
+            $tunStack
         );
 
         $compiledClients = SelectorCompiler::compileClients($clients);
@@ -117,7 +124,12 @@ final class RuntimeConfigBuilder
             ],
         ];
         $dnsRules = [];
-        $warnings = [];
+        $warnings = NetworkPreflightValidator::validateStatic([
+            'policy_plan' => $policyPlan,
+            'selectors' => [
+                'policy_dns_address' => $policyDnsAddress,
+            ],
+        ]);
 
         if ($policyRequired) {
             $dnsServers[] = [
@@ -320,6 +332,8 @@ final class RuntimeConfigBuilder
         array $captureInterfaces,
         array $clients,
         array $redirectDomains,
+        string $dnsListenAddress,
+        int $dnsListenPort,
         string $fakeIpRange,
         string $policyDnsType,
         string $policyDnsAddress,
@@ -328,7 +342,10 @@ final class RuntimeConfigBuilder
         string $policyDnsPath,
         string $policyOutboundMode,
         string $policyBindAddress,
-        string $policyGateway
+        string $policyGateway,
+        string $tunInterface,
+        string $tunAddress,
+        string $tunStack
     ): void {
         if (!in_array($captureMode, ['selected', 'all_lan'], true)) {
             throw new \RuntimeException('MVC-модель содержит неподдерживаемый режим перенаправления.');
@@ -341,6 +358,9 @@ final class RuntimeConfigBuilder
         }
         if ($policyDnsPort < 1 || $policyDnsPort > 65535) {
             throw new \RuntimeException('MVC-модель содержит некорректный порт policy DNS.');
+        }
+        if ($dnsListenPort < 1 || $dnsListenPort > 65535) {
+            throw new \RuntimeException('MVC-модель содержит некорректный порт DNS listener.');
         }
         if ($policyDnsPath === '' || strlen($policyDnsPath) > 256
             || preg_match('#^/[A-Za-z0-9._~%/-]*$#', $policyDnsPath) !== 1
@@ -355,14 +375,22 @@ final class RuntimeConfigBuilder
         if ($policyGateway !== '' && preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $policyGateway) !== 1) {
             throw new \RuntimeException('MVC-модель содержит некорректное имя gateway policy routing.');
         }
+        if (preg_match('/^[A-Za-z0-9_.-]{1,15}$/', $tunInterface) !== 1) {
+            throw new \RuntimeException('MVC-модель содержит некорректное имя TUN-интерфейса.');
+        }
+        if (!in_array($tunStack, ['system', 'gvisor', 'mixed'], true)) {
+            throw new \RuntimeException('MVC-модель содержит неподдерживаемый сетевой стек TUN.');
+        }
 
         $messages = array_merge(
             SelectionValidator::validateCaptureInterfaces($captureInterfaces),
             SelectionValidator::validateClients(implode("\n", $clients)),
             SelectionValidator::validateDomains(implode("\n", $redirectDomains)),
+            SelectionValidator::validateIpv4Address($dnsListenAddress),
             SelectionValidator::validateIpv4Network($fakeIpRange),
             SelectionValidator::validateIpv4Address($policyDnsAddress, true),
-            SelectionValidator::validateIpv4Address($policyBindAddress, true)
+            SelectionValidator::validateIpv4Address($policyBindAddress, true),
+            SelectionValidator::validateIpv4InterfaceAddress($tunAddress)
         );
 
         if ($messages !== []) {
@@ -420,8 +448,11 @@ final class RuntimeConfigBuilder
     private static function intValue($value, int $default): int
     {
         $candidate = self::stringValue($value);
-        if ($candidate === '' || !ctype_digit($candidate)) {
+        if ($candidate === '') {
             return $default;
+        }
+        if (!ctype_digit($candidate)) {
+            return 0;
         }
         return (int)$candidate;
     }

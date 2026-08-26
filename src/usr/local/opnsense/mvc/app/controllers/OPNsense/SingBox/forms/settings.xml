@@ -97,7 +97,7 @@
         <label>Gateway policy-маршрута</label>
         <type>dropdown</type>
         <advanced>true</advanced>
-        <help>Выберите IPv4 gateway OPNsense, через который должен выходить source-bound policy-трафик. Если gateway недоступен, fail-closed правило не позволит этому трафику уйти обычным маршрутом.</help>
+        <help>Выберите активный IPv4 gateway OPNsense, через который должен выходить source-bound policy-трафик. Если gateway позднее станет недоступен, fail-closed правило не позволит этому трафику уйти обычным маршрутом.</help>
     </field>
     <field>
         <id>settings.tun.interfaceName</id>

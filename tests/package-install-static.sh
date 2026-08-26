@@ -17,6 +17,7 @@ done
 grep -q '^VERSION?=[[:space:]]*1\.1\.0$' "$MAKEFILE"
 grep -Fq 'VERSION="${VERSION:-1.1.0}"' "$BUILD_SCRIPT"
 grep -Fq 'need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanValidator.php"' "$BUILD_SCRIPT"
+grep -Fq 'need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/NetworkPreflightValidator.php"' "$BUILD_SCRIPT"
 grep -Fq 'need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/FirewallRuleBuilder.php"' "$BUILD_SCRIPT"
 
 grep -q 'RC_STATE_FILE=.*sing_box.rc.upgrade' "$PRE_INSTALL"

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php';
 require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php';
 require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php';
+require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/NetworkPreflightValidator.php';
 require_once __DIR__ . '/../src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php';
 
 use OPNsense\SingBox\Runtime\RuntimeConfigBuilder;
@@ -363,6 +364,44 @@ try {
 }
 if (!$invalidPolicyDnsPathRejected) {
     failTest('Runtime builder должен отклонять некорректный путь policy DNS over HTTPS.');
+}
+
+$invalidPortRejected = false;
+try {
+    RuntimeConfigBuilder::build([
+        'capture' => ['mode' => 'selected'],
+        'dns' => ['listenPort' => 'not-a-port'],
+        'tun' => [],
+    ]);
+} catch (RuntimeException $error) {
+    $invalidPortRejected = true;
+}
+if (!$invalidPortRejected) {
+    failTest('Runtime builder не должен молча заменять некорректный порт DNS listener значением по умолчанию.');
+}
+
+$invalidTunRejected = false;
+try {
+    RuntimeConfigBuilder::build([
+        'capture' => ['mode' => 'selected'],
+        'dns' => [],
+        'tun' => ['address' => '172.19.0.0/30'],
+    ]);
+} catch (RuntimeException $error) {
+    $invalidTunRejected = true;
+}
+if (!$invalidTunRejected) {
+    failTest('Runtime builder должен отклонять адрес сети вместо IPv4-адреса TUN.');
+}
+
+$overlappingNetworksPlan = RuntimeConfigBuilder::build([
+    'capture' => ['mode' => 'selected'],
+    'dns' => ['fakeIpRange' => '172.19.0.0/24'],
+    'tun' => ['address' => '172.19.0.1/30'],
+]);
+assertSameValue(false, $overlappingNetworksPlan['apply_ready'], 'Пересекающиеся сети FakeIP и TUN должны блокировать Apply');
+if ($overlappingNetworksPlan['warnings'] === []) {
+    failTest('Пересечение FakeIP и TUN должно быть объяснено в предупреждениях preview.');
 }
 
 $wrappedPlan = RuntimeConfigBuilder::build([

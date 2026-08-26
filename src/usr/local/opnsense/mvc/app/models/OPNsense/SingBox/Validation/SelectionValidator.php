@@ -111,6 +111,44 @@ final class SelectionValidator
         return [];
     }
 
+    public static function validateIpv4InterfaceAddress(string $value): array
+    {
+        $value = trim($value);
+        if ($value === '' || substr_count($value, '/') !== 1) {
+            return ['Укажите IPv4-адрес интерфейса с префиксом сети.'];
+        }
+
+        [$address, $prefixValue] = array_map('trim', explode('/', $value, 2));
+        if (
+            filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            || $prefixValue === ''
+            || !ctype_digit($prefixValue)
+        ) {
+            return ['Укажите корректный IPv4-адрес интерфейса с префиксом сети.'];
+        }
+
+        $prefix = (int)$prefixValue;
+        if ($prefix < 1 || $prefix > 32) {
+            return ['Длина префикса IPv4-интерфейса должна находиться в диапазоне от 1 до 32.'];
+        }
+
+        $packed = @inet_pton($address);
+        if ($packed === false) {
+            return ['Не удалось проверить IPv4-адрес интерфейса.'];
+        }
+
+        if ($prefix <= 30) {
+            $network = self::maskIpv4($packed, $prefix);
+            $hostMask = self::maskIpv4("\xff\xff\xff\xff", $prefix) ^ "\xff\xff\xff\xff";
+            $broadcast = $network | $hostMask;
+            if ($packed === $network || $packed === $broadcast) {
+                return ['IPv4-адрес TUN не может быть адресом сети или broadcast.'];
+            }
+        }
+
+        return [];
+    }
+
     private static function validateList(string $value, callable $validator): array
     {
         if (strlen($value) > self::MAX_INPUT_BYTES) {

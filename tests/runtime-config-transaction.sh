@@ -55,6 +55,7 @@ prepare_scenario()
     SCENARIO_ACTIVE="$SCENARIO_ROOT/var/run/sing-box-policy-active"
     SCENARIO_CONFIG="$SCENARIO_ROOT/usr/local/etc/sing-box/config.json"
     SCENARIO_MODEL="$SCENARIO_DIR/model.json"
+    SCENARIO_ENVIRONMENT="$SCENARIO_DIR/network-environment.json"
     SCENARIO_SCRIPT="$SCENARIO_DIR/runtime_config.php"
     SCENARIO_STDOUT="$SCENARIO_DIR/stdout"
     SCENARIO_STDERR="$SCENARIO_DIR/stderr"
@@ -160,6 +161,33 @@ SH
   }
 }
 JSON
+
+    cat > "$SCENARIO_ENVIRONMENT" <<'JSON'
+{
+  "interfaces": {
+    "lan": {
+      "device": "igc0",
+      "enabled": true,
+      "present": true,
+      "up": true
+    }
+  },
+  "local_ipv4_addresses": ["127.0.0.1", "192.0.2.1", "192.0.2.70"],
+  "local_ipv4_networks": [
+    {"device": "lo0", "cidr": "127.0.0.1/8"},
+    {"device": "igc0", "cidr": "192.0.2.1/24"}
+  ],
+  "gateways": {
+    "VPN_GW": {
+      "ipprotocol": "inet",
+      "if": "igc1",
+      "disabled": false,
+      "defunct": false,
+      "force_down": false
+    }
+  }
+}
+JSON
 }
 
 seed_managed_runtime()
@@ -182,6 +210,7 @@ run_apply()
 
     set +e
     RUNTIME_TEST_MODEL="$SCENARIO_MODEL" \
+        RUNTIME_TEST_NETWORK_ENVIRONMENT="$SCENARIO_ENVIRONMENT" \
         MOCK_SERVICE_STATUS="$service_status" \
         MOCK_RESTART_FAIL_ON="$restart_fail_on" \
         MOCK_SKIP_ACTIVATION_ON="$skip_activation_on" \
@@ -206,6 +235,28 @@ run_adoption()
         > "$SCENARIO_STDOUT" 2> "$SCENARIO_STDERR"
     ADOPTION_STATUS=$?
     set -e
+}
+
+run_preflight()
+{
+    set +e
+    RUNTIME_TEST_MODEL="$SCENARIO_MODEL" \
+        RUNTIME_TEST_NETWORK_ENVIRONMENT="$SCENARIO_ENVIRONMENT" \
+        php -d "include_path=$STUB_DIR" "$SCENARIO_SCRIPT" preflight \
+        > "$SCENARIO_STDOUT" 2> "$SCENARIO_STDERR"
+    PREFLIGHT_STATUS=$?
+    set -e
+}
+
+test_network_preflight_success()
+{
+    prepare_scenario network-preflight-success
+    run_preflight
+
+    [ "$PREFLIGHT_STATUS" -eq 0 ] || fail "успешный сетевой preflight завершился кодом $PREFLIGHT_STATUS"
+    assert_log 'OK {"ready":true,"errors":[]}' "$SCENARIO_STDOUT"
+    assert_absent "$SCENARIO_STATE/apply.lock"
+    assert_absent "$SCENARIO_CONFIG"
 }
 
 test_unmanaged_adoption_success()
@@ -316,12 +367,29 @@ test_activation_mismatch_rollback()
     assert_log 'Контрольная сумма активного policy-плана не совпала' "$SCENARIO_STDERR"
 }
 
+test_network_preflight_failure()
+{
+    prepare_scenario network-preflight-failure
+    seed_managed_runtime
+    sed -i 's/, "192.0.2.70"//' "$SCENARIO_ENVIRONMENT"
+    run_apply 0
+
+    [ "$APPLY_STATUS" -eq 78 ] || fail "ошибка сетевого preflight вернула код $APPLY_STATUS вместо 78"
+    assert_equal "$SCENARIO_DIR/expected-config.json" "$SCENARIO_CONFIG"
+    assert_equal "$SCENARIO_DIR/expected-policy.json" "$SCENARIO_STATE/policy-plan.json"
+    [ "$(restart_count)" -eq 0 ] || fail "ошибка сетевого preflight привела к перезапуску службы"
+    assert_log 'Сетевой preflight не пройден' "$SCENARIO_STDERR"
+    assert_log 'не назначен OPNsense' "$SCENARIO_STDERR"
+}
+
 trap cleanup EXIT HUP INT TERM
+test_network_preflight_success
 test_unmanaged_adoption_success
 test_adoption_checksum_invalidation
 test_running_service_success
 test_stopped_service_deferred_activation
 test_restart_failure_rollback
 test_activation_mismatch_rollback
+test_network_preflight_failure
 
 echo "Транзакционный Apply, managed-переход, restart и rollback runtime-конфигурации проверены"

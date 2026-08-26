@@ -38,6 +38,8 @@
             const fakeIpRoute = plan.fakeip_route || {};
             const policyOutbound = plan.policy_outbound || {};
             const dnsBootstrap = data && data.dns_bootstrap ? data.dns_bootstrap : {};
+            const networkPreflight = data && data.network_preflight ? data.network_preflight : {};
+            const preflightErrors = Array.isArray(networkPreflight.errors) ? networkPreflight.errors : [];
             const requirements = [];
 
             if (plan.requires_opnsense_dns_redirect === true) {
@@ -93,6 +95,15 @@
             $('#policyFakeIpRoute').text(fakeIpRouteText);
             $('#policyOutbound').text(outboundText);
             $('#policyDnsBootstrap').text(dnsBootstrapText);
+            $('#networkPreflightState').text(networkPreflight.ready === true ? 'Пройден' : 'Заблокирован');
+            const preflightList = $('#networkPreflightErrors').empty();
+            if (preflightErrors.length === 0) {
+                $('<li>').text('Адреса, интерфейсы, gateway и пересечения сетей проверены.').appendTo(preflightList);
+            } else {
+                preflightErrors.forEach(function(item) {
+                    $('<li>').text(item).appendTo(preflightList);
+                });
+            }
             $('#policyOperationCount').text(String(operations.length));
             $('#policyPlanState').text(plan.ready === true ? 'Готов' : (plan.required === true ? 'Требует завершения настройки' : 'Дополнительные правила не требуются'));
 
@@ -254,10 +265,13 @@
                 <dt>Маршрут FakeIP</dt><dd id="policyFakeIpRoute"></dd>
                 <dt>Policy outbound</dt><dd id="policyOutbound"></dd>
                 <dt>Policy DNS bootstrap</dt><dd id="policyDnsBootstrap"></dd>
+                <dt>Сетевой preflight</dt><dd id="networkPreflightState"></dd>
                 <dt>Операций OPNsense</dt><dd id="policyOperationCount"></dd>
             </dl>
             <strong>Необходимые компоненты:</strong>
             <ul id="policyRequirements" style="margin-top: 6px; margin-bottom: 0;"></ul>
+            <strong>Результат сетевого preflight:</strong>
+            <ul id="networkPreflightErrors" style="margin-top: 6px; margin-bottom: 0;"></ul>
         </div>
     </div>
 

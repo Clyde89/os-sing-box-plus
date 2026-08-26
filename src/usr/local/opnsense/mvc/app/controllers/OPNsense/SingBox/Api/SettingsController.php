@@ -59,6 +59,41 @@ class SettingsController extends ApiMutableModelControllerBase
         ];
     }
 
+    private function runtimeNetworkPreflight(): array
+    {
+        try {
+            $response = trim((new Backend())->configdRun('sing-box preflight'));
+            if (!str_starts_with($response, 'OK ')) {
+                return [
+                    'ready' => false,
+                    'errors' => [
+                        $response !== ''
+                            ? $response
+                            : 'Backend не подтвердил сетевой preflight.',
+                    ],
+                ];
+            }
+
+            $decoded = json_decode(substr($response, 3), true);
+            if (!is_array($decoded) || !is_bool($decoded['ready'] ?? null) || !is_array($decoded['errors'] ?? null)) {
+                return [
+                    'ready' => false,
+                    'errors' => ['Backend вернул некорректный результат сетевого preflight.'],
+                ];
+            }
+
+            return [
+                'ready' => $decoded['ready'],
+                'errors' => array_values(array_filter($decoded['errors'], 'is_string')),
+            ];
+        } catch (\Throwable $error) {
+            return [
+                'ready' => false,
+                'errors' => ['Не удалось выполнить сетевой preflight через configd.'],
+            ];
+        }
+    }
+
     public function previewAction()
     {
         if (!$this->request->isGet()) {
@@ -72,16 +107,23 @@ class SettingsController extends ApiMutableModelControllerBase
             $plan = RuntimeConfigBuilder::build($this->getModel()->getNodes());
             $config = RuntimeConfigBuilder::encodeConfig($plan);
             $ownership = $this->runtimeOwnership();
+            $networkPreflight = $this->runtimeNetworkPreflight();
             $warnings = $plan['warnings'];
 
             if ($ownership['warning'] !== null) {
                 $warnings[] = $ownership['warning'];
             }
+            foreach ($networkPreflight['errors'] as $preflightError) {
+                $warnings[] = $preflightError;
+            }
 
             return [
                 'result' => 'ok',
-                'apply_ready' => $plan['apply_ready'] && $ownership['apply_allowed'],
+                'apply_ready' => $plan['apply_ready']
+                    && $ownership['apply_allowed']
+                    && $networkPreflight['ready'],
                 'generation_ready' => $plan['apply_ready'],
+                'network_preflight' => $networkPreflight,
                 'management_state' => $ownership['state'],
                 'warnings' => $warnings,
                 'selectors' => $plan['selectors'],

@@ -7,8 +7,10 @@ require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/Sel
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanValidator.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php');
+require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/NetworkPreflightValidator.php');
 require_once('/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php');
 
+use OPNsense\SingBox\Runtime\NetworkPreflightValidator;
 use OPNsense\SingBox\Runtime\PolicyPlanValidator;
 use OPNsense\SingBox\Runtime\RuntimeConfigBuilder;
 use OPNsense\SingBox\Settings;
@@ -420,6 +422,116 @@ function ensureManagedState(): bool
     return true;
 }
 
+function collectNetworkEnvironment(): array
+{
+    $fixturePath = getenv('RUNTIME_TEST_NETWORK_ENVIRONMENT');
+    if ($fixturePath !== false && $fixturePath !== '') {
+        $content = is_readable($fixturePath) ? file_get_contents($fixturePath) : false;
+        $fixture = is_string($content) ? json_decode($content, true) : null;
+        if (!is_array($fixture)) {
+            raiseRuntime('Тестовый снимок сетевого окружения имеет некорректный формат.', 78);
+        }
+        return $fixture;
+    }
+
+    require_once('interfaces.inc');
+    global $config;
+
+    if (!function_exists('legacy_interfaces_details')) {
+        raiseRuntime('Системный API интерфейсов OPNsense недоступен для preflight.', 69);
+    }
+    $details = legacy_interfaces_details();
+    if (!is_array($details)) {
+        raiseRuntime('Не удалось получить текущее состояние сетевых интерфейсов OPNsense.', 69);
+    }
+
+    $localAddresses = [];
+    $localNetworks = [];
+    foreach ($details as $device => $detail) {
+        if (!is_array($detail)) {
+            continue;
+        }
+        foreach ($detail['ipv4'] ?? [] as $address) {
+            if (!is_array($address)) {
+                continue;
+            }
+            $ip = trim((string)($address['ipaddr'] ?? ''));
+            $prefix = $address['subnetbits'] ?? null;
+            if (
+                filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+                || !is_numeric($prefix)
+                || (int)$prefix < 0
+                || (int)$prefix > 32
+            ) {
+                continue;
+            }
+            $localAddresses[] = $ip;
+            $localNetworks[] = [
+                'device' => (string)$device,
+                'cidr' => $ip . '/' . (int)$prefix,
+            ];
+        }
+    }
+    foreach (($config['staticroutes']['route'] ?? []) as $route) {
+        if (!is_array($route)) {
+            continue;
+        }
+        $enabled = !array_key_exists('enabled', $route)
+            || !in_array(strtolower(trim((string)$route['enabled'])), ['', '0', 'no', 'false', 'off'], true);
+        $network = trim((string)($route['network'] ?? ''));
+        if ($enabled && str_contains($network, ':') === false) {
+            $localNetworks[] = [
+                'device' => 'static-route',
+                'cidr' => $network,
+            ];
+        }
+    }
+
+    $configuredInterfaces = [];
+    foreach (($config['interfaces'] ?? []) as $name => $interface) {
+        if (!is_array($interface)) {
+            continue;
+        }
+        $device = trim((string)($interface['if'] ?? ''));
+        $detail = is_array($details[$device] ?? null) ? $details[$device] : [];
+        $flags = array_map('strtolower', is_array($detail['flags'] ?? null) ? $detail['flags'] : []);
+        $enabled = !array_key_exists('enable', $interface)
+            || !in_array(strtolower(trim((string)$interface['enable'])), ['', '0', 'no', 'false', 'off'], true);
+        $configuredInterfaces[(string)$name] = [
+            'device' => $device,
+            'enabled' => $enabled,
+            'present' => $device !== '' && isset($details[$device]),
+            'up' => in_array('up', $flags, true),
+        ];
+    }
+
+    if (!class_exists('\\OPNsense\\Routing\\Gateways')) {
+        raiseRuntime('Системный API gateway OPNsense недоступен для preflight.', 69);
+    }
+    $gateways = [];
+    foreach ((new \OPNsense\Routing\Gateways())->gatewaysIndexedByName(true, false, true) as $name => $gateway) {
+        if (is_array($gateway)) {
+            $gateways[(string)$name] = $gateway;
+        }
+    }
+
+    return [
+        'interfaces' => $configuredInterfaces,
+        'local_ipv4_addresses' => array_values(array_unique($localAddresses)),
+        'local_ipv4_networks' => $localNetworks,
+        'gateways' => $gateways,
+    ];
+}
+
+function networkPreflight(array $plan): array
+{
+    $errors = NetworkPreflightValidator::validateEnvironment($plan, collectNetworkEnvironment());
+    return [
+        'ready' => $errors === [],
+        'errors' => $errors,
+    ];
+}
+
 $tempFile = '';
 $policySnapshot = [];
 $transactionStarted = false;
@@ -429,8 +541,20 @@ $serviceRunningBeforeApply = false;
 $backupFile = TARGET_CONFIG . '.bak';
 
 try {
-    if ($argc !== 2 || !in_array($argv[1], ['apply', 'approve-adoption'], true)) {
-        raiseRuntime('Поддерживаются только действия apply и approve-adoption.', 64);
+    if ($argc !== 2 || !in_array($argv[1], ['apply', 'approve-adoption', 'preflight'], true)) {
+        raiseRuntime('Поддерживаются только действия apply, approve-adoption и preflight.', 64);
+    }
+
+    if ($argv[1] === 'preflight') {
+        $model = new Settings();
+        $plan = RuntimeConfigBuilder::build($model->getNodes());
+        $preflight = networkPreflight($plan);
+        $json = json_encode($preflight, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            raiseRuntime('Не удалось сериализовать результат сетевого preflight.', 70);
+        }
+        echo 'OK ' . $json . PHP_EOL;
+        exit(0);
     }
 
     $lockHandle = acquireApplyLock();
@@ -464,6 +588,11 @@ try {
             'Runtime-конфигурация не готова к применению.' . ($details !== '' ? ' ' . $details : ''),
             65
         );
+    }
+
+    $preflight = networkPreflight($plan);
+    if (($preflight['ready'] ?? false) !== true) {
+        raiseRuntime('Сетевой preflight не пройден: ' . implode(' ', $preflight['errors'] ?? []), 78);
     }
 
     $config = RuntimeConfigBuilder::encodeConfig($plan);

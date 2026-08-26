@@ -38,6 +38,7 @@ jobs:
           test -f tests/service-config.sh
           test -f tests/log-control.sh
           test -f tests/selection-validator.php
+          test -f tests/network-preflight-validator.php
           test -f tests/selector-compiler.php
           test -f tests/policy-plan-validator.php
           test -f tests/policy-plan-builder.php
@@ -70,6 +71,7 @@ jobs:
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanValidator.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/NetworkPreflightValidator.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/FirewallRuleBuilder.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
           test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
@@ -116,7 +118,8 @@ jobs:
           grep -Fq '<redirectDomains type=".\DomainListField"/>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -Fq '<fakeIpRange type=".\FakeIpRangeField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<Default>198.18.0.0/15</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
-          grep -q '<version>1.4.0</version>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<version>1.5.0</version>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<ConfigdPopulateAct>interface gateways list -l</ConfigdPopulateAct>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<policyUpstreamAddress type="NetworkField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<policyUpstreamPort type="PortField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<Default>selected</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
@@ -143,8 +146,11 @@ jobs:
           grep -q 'Validation/SelectionValidator.php' src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
           grep -q 'Runtime/SelectorCompiler.php' src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
           grep -q 'Runtime/PolicyPlanBuilder.php' src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
+          grep -q 'Runtime/NetworkPreflightValidator.php' src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
           grep -q '^\[apply\]$' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
           grep -q 'runtime_config.php apply' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
+          grep -q '^\[preflight\]$' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
+          grep -q 'runtime_config.php preflight' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
           grep -Fq 'chmod 0755 "$STAGEDIR/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php"' build.sh
           if grep -q '/releases/latest/' build.sh; then
             echo 'Обнаружена плавающая ссылка releases/latest' >&2
@@ -287,6 +293,12 @@ jobs:
         run: |
           set -euo pipefail
           php tests/selector-compiler.php
+
+      - name: Проверка сетевого preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/network-preflight-validator.php
 
       - name: Проверка декларативного policy-плана OPNsense
         shell: bash

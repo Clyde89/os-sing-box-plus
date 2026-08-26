@@ -1,7 +1,7 @@
 <model>
     <mount>//OPNsense/SingBox/settings</mount>
     <description>Структурированные настройки sing-box</description>
-    <version>1.4.0</version>
+    <version>1.5.0</version>
     <items>
         <capture>
             <mode type="OptionField">
@@ -79,7 +79,7 @@
             </bindAddress>
             <gateway type="JsonKeyValueStoreField">
                 <Required>N</Required>
-                <ConfigdPopulateAct>interface gateways list -g</ConfigdPopulateAct>
+                <ConfigdPopulateAct>interface gateways list -l</ConfigdPopulateAct>
                 <ValidationMessage>Выберите доступный IPv4 gateway для policy routing.</ValidationMessage>
             </gateway>
         </policy>
