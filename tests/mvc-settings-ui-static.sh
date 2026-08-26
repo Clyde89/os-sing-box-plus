@@ -7,6 +7,7 @@ VIEW="$ROOT_DIR/src/usr/local/opnsense/mvc/app/views/OPNsense/SingBox/settings.v
 FORM="$ROOT_DIR/src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml"
 MODEL="$ROOT_DIR/src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml"
 ACL="$ROOT_DIR/src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/ACL/ACL.xml"
+MENU="$ROOT_DIR/src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Menu/Menu.xml"
 API_CONTROLLER="$ROOT_DIR/src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php"
 
 [ -f "$CONTROLLER" ]
@@ -14,6 +15,7 @@ API_CONTROLLER="$ROOT_DIR/src/usr/local/opnsense/mvc/app/controllers/OPNsense/Si
 [ -f "$FORM" ]
 [ -f "$MODEL" ]
 [ -f "$ACL" ]
+[ -f "$MENU" ]
 [ -f "$API_CONTROLLER" ]
 
 grep -q "getForm('settings')" "$CONTROLLER"
@@ -68,6 +70,8 @@ grep -q "'dns_bootstrap'" "$API_CONTROLLER"
 grep -q 'function adoptAction' "$API_CONTROLLER"
 grep -q 'ui/singbox/\*' "$ACL"
 grep -q 'api/singbox/settings/\*' "$ACL"
+grep -Fq '<SingBox VisibleName="sing-box" order="30" url="/ui/singbox/settings"/>' "$MENU"
+grep -Fq '<SingBoxExpert VisibleName="sing-box: Служба и экспертный JSON" order="31" url="/sing-box.php"/>' "$MENU"
 
 if grep -q 'saveFormToEndpoint.*settings/apply' "$VIEW"; then
     echo "Сохранение MVC-настроек не должно автоматически применять runtime-конфигурацию" >&2

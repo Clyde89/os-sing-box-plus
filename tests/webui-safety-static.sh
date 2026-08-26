@@ -7,7 +7,12 @@ WEBUI="$ROOT_DIR/src/usr/local/www/sing-box.php"
 [ -f "$WEBUI" ]
 
 grep -Fq "const SETUP_REQUIRED_FILE = '/var/db/os-sing-box/setup-required';" "$WEBUI"
+grep -Fq "const MANAGED_CONFIG_FILE = '/var/db/os-sing-box/managed-config';" "$WEBUI"
+grep -Fq "const APPLY_LOCK_FILE = '/var/db/os-sing-box/apply.lock';" "$WEBUI"
 grep -q '^function setupRequired()' "$WEBUI"
+grep -q '^function managedConfig()' "$WEBUI"
+grep -q '^function acquireConfigurationLock()' "$WEBUI"
+grep -q '^function releaseConfigurationLock(' "$WEBUI"
 grep -q '^function finishInitialSetup()' "$WEBUI"
 grep -q '^function configdAction(' "$WEBUI"
 grep -q '^function serviceEnabled()' "$WEBUI"
@@ -15,6 +20,13 @@ grep -q '^function serviceEnableAction(' "$WEBUI"
 grep -q '^function clearLog()' "$WEBUI"
 grep -Fq 'chmod($backupFile, 0600)' "$WEBUI"
 grep -Fq '@unlink($backupFile)' "$WEBUI"
+grep -Fq '@flock($handle, LOCK_EX | LOCK_NB)' "$WEBUI"
+grep -Fq 'releaseConfigurationLock($lockHandle)' "$WEBUI"
+grep -Fq 'if (managedConfig()) {' "$WEBUI"
+grep -q 'Изменение экспертного JSON заблокировано' "$WEBUI"
+grep -Fq "\$managedConfig ? ' readonly' : ''" "$WEBUI"
+grep -Fq "\$managedConfig ? ' disabled' : ''" "$WEBUI"
+grep -Fq 'href="/ui/singbox/settings"' "$WEBUI"
 grep -Fq "(\$action === 'start' || \$action === 'restart') && setupRequired()" "$WEBUI"
 grep -Fq "'enabled' => serviceEnabled()" "$WEBUI"
 grep -Fq "'setup_required' => setupRequired()" "$WEBUI"
@@ -45,4 +57,4 @@ if grep -q "const SINGBOX_LOG_FILE" "$WEBUI"; then
     exit 1
 fi
 
-echo "Защиты первоначальной настройки WebUI проверены"
+echo "Защиты первоначальной настройки и экспертного режима WebUI проверены"

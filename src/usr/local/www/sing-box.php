@@ -40,7 +40,10 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 const SINGBOX_CONFIG_FILE = '/usr/local/etc/sing-box/config.json';
 const SINGBOX_BINARY = '/usr/local/bin/sing-box';
 const CONFIGCTL_BINARY = '/usr/local/sbin/configctl';
+const STATE_DIRECTORY = '/var/db/os-sing-box';
 const SETUP_REQUIRED_FILE = '/var/db/os-sing-box/setup-required';
+const MANAGED_CONFIG_FILE = '/var/db/os-sing-box/managed-config';
+const APPLY_LOCK_FILE = '/var/db/os-sing-box/apply.lock';
 const STATUS_ENDPOINT = '/sing-box.php?ajax=status';
 const LOGS_ENDPOINT = '/sing-box_log.php';
 const CSRF_TOKEN_KEY = 'sing_box_service_csrf_token';
@@ -83,6 +86,44 @@ function runCommand($command)
 function setupRequired()
 {
     return is_file(SETUP_REQUIRED_FILE);
+}
+
+function managedConfig()
+{
+    return is_file(MANAGED_CONFIG_FILE);
+}
+
+function acquireConfigurationLock()
+{
+    if (!is_dir(STATE_DIRECTORY) && !@mkdir(STATE_DIRECTORY, 0700, true)) {
+        return [null, 'Не удалось создать каталог состояния конфигурации.'];
+    }
+    if (!@chmod(STATE_DIRECTORY, 0700)) {
+        return [null, 'Не удалось подтвердить безопасные права каталога состояния.'];
+    }
+
+    $handle = @fopen(APPLY_LOCK_FILE, 'c');
+    if ($handle === false) {
+        return [null, 'Не удалось открыть блокировку изменения конфигурации.'];
+    }
+    if (!@chmod(APPLY_LOCK_FILE, 0600)) {
+        @fclose($handle);
+        return [null, 'Не удалось установить безопасные права блокировки конфигурации.'];
+    }
+    if (!@flock($handle, LOCK_EX | LOCK_NB)) {
+        @fclose($handle);
+        return [null, 'Другая операция применения runtime-конфигурации уже выполняется.'];
+    }
+
+    return [$handle, null];
+}
+
+function releaseConfigurationLock($handle)
+{
+    if (is_resource($handle)) {
+        @flock($handle, LOCK_UN);
+        @fclose($handle);
+    }
 }
 
 function finishInitialSetup()
@@ -139,73 +180,90 @@ function validateSingBoxConfig($path)
 
 function saveConfig($content)
 {
-    if (trim($content) === '') {
-        return [false, 'Конфигурация не может быть пустой.'];
-    }
-
-    if (strlen($content) > MAX_CONFIG_SIZE) {
-        return [false, 'Размер конфигурации превышает 4 МиБ.'];
-    }
-
-    $jsonError = validateJson($content);
-    if ($jsonError !== null) {
-        return [false, 'Некорректный JSON: ' . $jsonError];
-    }
-
-    $directory = dirname(SINGBOX_CONFIG_FILE);
-    if (!is_dir($directory) || !is_writable($directory)) {
-        return [false, 'Каталог конфигурации недоступен для записи.'];
-    }
-
-    $tempFile = tempnam($directory, '.singbox_cfg_');
-    if ($tempFile === false) {
-        return [false, 'Не удалось создать временный файл конфигурации.'];
+    [$lockHandle, $lockError] = acquireConfigurationLock();
+    if (!is_resource($lockHandle)) {
+        return [false, $lockError];
     }
 
     try {
-        if (file_put_contents($tempFile, $content, LOCK_EX) === false) {
-            return [false, 'Не удалось записать временный файл конфигурации.'];
+        if (managedConfig()) {
+            return [false, 'Runtime-конфигурация управляется структурированными настройками. Изменение экспертного JSON заблокировано.'];
         }
 
-        if (!@chmod($tempFile, 0600)) {
-            return [false, 'Не удалось установить безопасные права на временный файл конфигурации.'];
+        if (trim($content) === '') {
+            return [false, 'Конфигурация не может быть пустой.'];
         }
 
-        [$valid, $validationMessage] = validateSingBoxConfig($tempFile);
-        if (!$valid) {
-            return [false, 'Конфигурация не прошла проверку sing-box: ' . $validationMessage];
+        if (strlen($content) > MAX_CONFIG_SIZE) {
+            return [false, 'Размер конфигурации превышает 4 МиБ.'];
         }
 
-        $backupFile = SINGBOX_CONFIG_FILE . '.bak';
-        if (is_file(SINGBOX_CONFIG_FILE)) {
-            if (!@copy(SINGBOX_CONFIG_FILE, $backupFile)) {
-                return [false, 'Не удалось создать резервную копию текущей конфигурации.'];
+        $jsonError = validateJson($content);
+        if ($jsonError !== null) {
+            return [false, 'Некорректный JSON: ' . $jsonError];
+        }
+
+        $directory = dirname(SINGBOX_CONFIG_FILE);
+        if (!is_dir($directory) || !is_writable($directory)) {
+            return [false, 'Каталог конфигурации недоступен для записи.'];
+        }
+
+        $tempFile = tempnam($directory, '.singbox_cfg_');
+        if ($tempFile === false) {
+            return [false, 'Не удалось создать временный файл конфигурации.'];
+        }
+
+        try {
+            if (file_put_contents($tempFile, $content, LOCK_EX) === false) {
+                return [false, 'Не удалось записать временный файл конфигурации.'];
             }
 
-            if (!@chmod($backupFile, 0600)) {
-                @unlink($backupFile);
-                return [false, 'Не удалось установить безопасные права на резервную копию конфигурации.'];
+            if (!@chmod($tempFile, 0600)) {
+                return [false, 'Не удалось установить безопасные права на временный файл конфигурации.'];
+            }
+
+            [$valid, $validationMessage] = validateSingBoxConfig($tempFile);
+            if (!$valid) {
+                return [false, 'Конфигурация не прошла проверку sing-box: ' . $validationMessage];
+            }
+
+            $backupFile = SINGBOX_CONFIG_FILE . '.bak';
+            if (is_file(SINGBOX_CONFIG_FILE)) {
+                if (!@copy(SINGBOX_CONFIG_FILE, $backupFile)) {
+                    return [false, 'Не удалось создать резервную копию текущей конфигурации.'];
+                }
+
+                if (!@chmod($backupFile, 0600)) {
+                    @unlink($backupFile);
+                    return [false, 'Не удалось установить безопасные права на резервную копию конфигурации.'];
+                }
+            }
+
+            if (managedConfig()) {
+                return [false, 'Runtime-конфигурация перешла под управление структурированных настроек во время проверки. Сохранение экспертного JSON отменено.'];
+            }
+
+            if (!@rename($tempFile, SINGBOX_CONFIG_FILE)) {
+                return [false, 'Не удалось атомарно заменить конфигурацию.'];
+            }
+
+            $tempFile = '';
+            if (!@chmod(SINGBOX_CONFIG_FILE, 0600)) {
+                return [false, 'Конфигурация сохранена, но не удалось подтвердить безопасные права файла.'];
+            }
+
+            if (!finishInitialSetup()) {
+                return [false, 'Конфигурация сохранена, но не удалось завершить первоначальную настройку.'];
+            }
+
+            return [true, 'Конфигурация проверена и сохранена.'];
+        } finally {
+            if ($tempFile !== '') {
+                @unlink($tempFile);
             }
         }
-
-        if (!@rename($tempFile, SINGBOX_CONFIG_FILE)) {
-            return [false, 'Не удалось атомарно заменить конфигурацию.'];
-        }
-
-        $tempFile = '';
-        if (!@chmod(SINGBOX_CONFIG_FILE, 0600)) {
-            return [false, 'Конфигурация сохранена, но не удалось подтвердить безопасные права файла.'];
-        }
-
-        if (!finishInitialSetup()) {
-            return [false, 'Конфигурация сохранена, но не удалось завершить первоначальную настройку.'];
-        }
-
-        return [true, 'Конфигурация проверена и сохранена.'];
     } finally {
-        if ($tempFile !== '') {
-            @unlink($tempFile);
-        }
+        releaseConfigurationLock($lockHandle);
     }
 }
 
@@ -314,6 +372,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'status') {
             'status' => serviceStatus(),
             'enabled' => serviceEnabled(),
             'setup_required' => setupRequired(),
+            'managed_config' => managedConfig(),
         ],
         JSON_UNESCAPED_UNICODE
     );
@@ -361,6 +420,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $configContent = readConfig();
 $csrfToken = getCsrfToken();
 $setupRequired = setupRequired();
+$managedConfig = managedConfig();
 $serviceEnabled = serviceEnabled();
 $serviceStateKnown = is_bool($serviceEnabled);
 
@@ -444,6 +504,24 @@ include("fbegin.inc");
                 </div>
             <?php endif; ?>
 
+            <div class="col-xs-12">
+                <div class="alert alert-info">
+                    <strong>Служба и экспертный JSON.</strong>
+                    Основная настройка sing-box выполняется в
+                    <a href="/ui/singbox/settings" class="alert-link">структурированном WebUI</a>.
+                    Эта страница оставлена для диагностики, управления службой и совместимости с unmanaged-конфигурацией.
+                </div>
+            </div>
+
+            <?php if ($managedConfig): ?>
+                <div class="col-xs-12">
+                    <div class="alert alert-warning">
+                        <strong>Runtime-конфигурация управляется структурированными настройками.</strong>
+                        Экспертный JSON доступен только для просмотра. Его изменение заблокировано на серверной стороне.
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <section class="col-xs-12">
                 <div class="content-box">
                     <div class="singbox-title"><i class="fa fa-heartbeat text-muted"></i> Состояние службы</div>
@@ -486,14 +564,14 @@ include("fbegin.inc");
 
             <section class="col-xs-12">
                 <div class="content-box">
-                    <div class="singbox-title"><i class="fa fa-file-code-o text-muted"></i> Конфигурация</div>
+                    <div class="singbox-title"><i class="fa fa-file-code-o text-muted"></i> Экспертный JSON</div>
                     <div class="singbox-body">
                         <form method="post">
                             <input type="hidden" name="csrf_token" value="<?= h($csrfToken); ?>">
-                            <textarea id="config_content" name="config_content" rows="16" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" class="form-control singbox-editor"><?= h($configContent); ?></textarea>
-                            <p class="singbox-help">Перед сохранением проверяются синтаксис JSON и команда <code>sing-box check</code>. Текущая конфигурация сохраняется в резервную копию с правами <code>0600</code>.</p>
+                            <textarea id="config_content" name="config_content" rows="16" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" class="form-control singbox-editor"<?= $managedConfig ? ' readonly' : ''; ?>><?= h($configContent); ?></textarea>
+                            <p class="singbox-help"><?php if ($managedConfig): ?>Изменения выполняются через структурированный WebUI и транзакционный Apply.<?php else: ?>Перед сохранением проверяются синтаксис JSON и команда <code>sing-box check</code>. Текущая конфигурация сохраняется в резервную копию с правами <code>0600</code>.<?php endif; ?></p>
                             <br>
-                            <button type="submit" name="action" value="save_config" class="btn btn-primary"><i class="fa fa-save"></i> Проверить и сохранить</button>
+                            <button type="submit" name="action" value="save_config" class="btn btn-primary"<?= $managedConfig ? ' disabled' : ''; ?>><i class="fa fa-save"></i> Проверить и сохранить</button>
                         </form>
                     </div>
                 </div>
