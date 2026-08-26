@@ -21,6 +21,7 @@ last_line_of() {
 grep -q '^configured_tun_interface()' "$RC_SCRIPT"
 grep -q '^process_is_sing_box()' "$RC_SCRIPT"
 grep -q '^reload_firewall()' "$RC_SCRIPT"
+grep -q '^wait_for_policy_readiness()' "$RC_SCRIPT"
 grep -q '^activate_policy_rules()' "$RC_SCRIPT"
 grep -q '^deactivate_policy_rules()' "$RC_SCRIPT"
 grep -q '^cleanup_failed_start()' "$RC_SCRIPT"
@@ -31,6 +32,7 @@ grep -Fq 'managed_policy="${state_dir}/managed-policy"' "$RC_SCRIPT"
 grep -Fq 'policy_plan="${state_dir}/policy-plan.json"' "$RC_SCRIPT"
 grep -Fq 'tun_interface_file="${state_dir}/tun-interface"' "$RC_SCRIPT"
 grep -Fq 'policy_active="/var/run/sing-box-policy-active"' "$RC_SCRIPT"
+grep -Fq 'policy_readiness_helper="/usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php"' "$RC_SCRIPT"
 grep -Fq 'Запуск sing-box отклонён: первоначальная настройка не завершена.' "$RC_SCRIPT"
 grep -Fq 'cleanup_failed_start "$started_pid"' "$RC_SCRIPT"
 grep -Fq 'chmod 0600 "$pidfile"' "$RC_SCRIPT"
@@ -39,6 +41,7 @@ grep -Fq 'Процесс sing-box уже запущен, но интерфейс
 grep -Fq 'Процесс sing-box работает, но интерфейс $tun_interface отсутствует.' "$RC_SCRIPT"
 grep -Fq 'Интерфейс $tun_interface не был создан за 20 секунд; запуск отменён.' "$RC_SCRIPT"
 grep -Fq 'Запуск sing-box отменён: управляемые правила firewall не активированы.' "$RC_SCRIPT"
+grep -Fq 'Управляемые правила firewall не активированы: DNS listener не готов.' "$RC_SCRIPT"
 grep -Fq 'Остановка sing-box отменена: правила firewall не удалось безопасно отключить.' "$RC_SCRIPT"
 grep -Fq 'policy_checksum="$(sha256 -q "$policy_plan" 2>/dev/null || true)"' "$RC_SCRIPT"
 grep -Fq 'printf '\''%s\n'\'' "$policy_checksum" > "$policy_active" || return 1' "$RC_SCRIPT"
@@ -54,7 +57,7 @@ log_line="$(first_line_of 'if ! ensure_log_path; then')"
 [ "$setup_line" -lt "$log_line" ]
 
 interface_timeout_line="$(first_line_of 'Интерфейс $tun_interface не был создан за 20 секунд; запуск отменён.')"
-activate_start_line="$(last_line_of 'if ! activate_policy_rules; then')"
+activate_start_line="$(last_line_of 'if ! activate_policy_rules "$started_pid"; then')"
 activate_error_line="$(first_line_of 'Запуск sing-box отменён: управляемые правила firewall не активированы.')"
 activate_cleanup_line="$(last_line_of 'cleanup_failed_start "$started_pid"')"
 success_line="$(first_line_of 'echo "Служба запущена, PID $started_pid."')"
@@ -64,9 +67,11 @@ success_line="$(first_line_of 'echo "Служба запущена, PID $started
 [ "$activate_cleanup_line" -lt "$success_line" ]
 
 checksum_line="$(first_line_of 'policy_checksum="$(sha256 -q "$policy_plan" 2>/dev/null || true)"')"
+readiness_line="$(first_line_of 'if ! wait_for_policy_readiness "$policy_pid"; then')"
 active_write_line="$(first_line_of 'printf '\''%s\n'\'' "$policy_checksum" > "$policy_active" || return 1')"
 activate_reload_line="$(first_line_of 'if ! reload_firewall; then')"
 pending_remove_line="$(first_line_of 'rm -f "$pending_filter_reload"')"
+[ "$readiness_line" -lt "$checksum_line" ]
 [ "$checksum_line" -lt "$active_write_line" ]
 [ "$active_write_line" -lt "$activate_reload_line" ]
 [ "$activate_reload_line" -lt "$pending_remove_line" ]

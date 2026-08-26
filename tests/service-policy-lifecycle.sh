@@ -52,6 +52,12 @@ assertEquals()
     [ "$expected" = "$actual" ] || failPolicyLifecycle "$label: ожидалось '$expected', получено '$actual'"
 }
 
+wait_for_policy_readiness()
+{
+    printf '%s\n' "$1" >> "$READINESS_LOG"
+    [ "${READINESS_MODE:-success}" = "success" ]
+}
+
 prepareScenario()
 {
     scenario="$1"
@@ -65,8 +71,10 @@ prepareScenario()
     policy_plan="$state_dir/policy-plan.json"
     policy_active="$run_dir/sing-box-policy-active"
     CONFIGCTL_LOG="$scenario_root/configctl.log"
+    READINESS_LOG="$scenario_root/readiness.log"
     : > "$CONFIGCTL_LOG"
-    export CONFIGCTL_LOG
+    : > "$READINESS_LOG"
+    export CONFIGCTL_LOG READINESS_LOG
 }
 
 prepareManagedPlan()
@@ -84,19 +92,36 @@ reloadCount()
 prepareScenario activate_success
 prepareManagedPlan
 CONFIGCTL_MODE=success
+READINESS_MODE=success
 export CONFIGCTL_MODE
-activate_policy_rules >/dev/null
+export READINESS_MODE
+activate_policy_rules 4242 >/dev/null
 expected_checksum="$(sha256sum "$policy_plan" | awk '{print $1}')"
 assertEquals "$expected_checksum" "$(cat "$policy_active")" "Контрольная сумма активного policy-плана"
 assertEquals 600 "$(stat -c '%a' "$policy_active")" "Права признака активного policy-плана"
 [ ! -e "$pending_filter_reload" ] || failPolicyLifecycle 'После успешной активации остался pending firewall reload.'
 assertEquals 1 "$(reloadCount)" "Количество reload при успешной активации"
+assertEquals 4242 "$(cat "$READINESS_LOG")" "PID readiness-проверки"
+
+prepareScenario readiness_failure
+prepareManagedPlan
+CONFIGCTL_MODE=success
+READINESS_MODE=fail
+export CONFIGCTL_MODE READINESS_MODE
+if activate_policy_rules 4242 >/dev/null; then
+    failPolicyLifecycle 'Активация policy-правил прошла при неготовом DNS listener.'
+fi
+[ ! -e "$policy_active" ] || failPolicyLifecycle 'При неготовом DNS listener сохранился active-маркер.'
+[ -e "$pending_filter_reload" ] || failPolicyLifecycle 'При неготовом DNS listener был потерян pending firewall reload.'
+assertEquals 0 "$(reloadCount)" "Количество reload при неготовом DNS listener"
+assertEquals 4242 "$(cat "$READINESS_LOG")" "PID заблокированной readiness-проверки"
 
 prepareScenario activate_failure
 prepareManagedPlan
 CONFIGCTL_MODE=fail
-export CONFIGCTL_MODE
-if activate_policy_rules >/dev/null; then
+READINESS_MODE=success
+export CONFIGCTL_MODE READINESS_MODE
+if activate_policy_rules 4242 >/dev/null; then
     failPolicyLifecycle 'Активация policy-правил не завершилась ошибкой при отказе firewall reload.'
 fi
 [ ! -e "$policy_active" ] || failPolicyLifecycle 'После ошибки активации сохранился признак активного policy-плана.'

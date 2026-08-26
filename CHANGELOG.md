@@ -33,6 +33,7 @@
 - Сохранено fail-closed правило при отсутствующем или недоступном gateway.
 - Перенесена маршрутизация FakeIP-сети в `auto_route` и `route_address` TUN sing-box.
 - Связана активация policy-правил с успешным запуском TUN и SHA-256 сохранённого policy-плана.
+- Добавлена fail-closed проверка TCP/UDP readiness DNS listener текущего PID перед firewall-активацией.
 - Добавлена деактивация policy-правил до остановки процесса sing-box.
 - Добавлен откат признака активности при ошибке firewall reload.
 - Усилена валидация парности, порядка и согласованности policy route и fail-closed.

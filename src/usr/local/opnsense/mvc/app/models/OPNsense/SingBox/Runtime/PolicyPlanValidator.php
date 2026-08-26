@@ -39,6 +39,24 @@ final class PolicyPlanValidator
             $errors[] = 'Policy-план содержит некорректный признак подтверждения all_lan.';
         }
 
+        $dnsListener = $plan['dns_listener'] ?? null;
+        $dnsListenerAddress = null;
+        $dnsListenerPort = null;
+        if (!is_array($dnsListener)) {
+            $errors[] = 'Policy-план не содержит корректное описание DNS listener.';
+        } else {
+            $dnsListenerAddress = $dnsListener['address'] ?? null;
+            $dnsListenerPort = $dnsListener['port'] ?? null;
+            if (!is_string($dnsListenerAddress)
+                || filter_var($dnsListenerAddress, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false
+            ) {
+                $errors[] = 'DNS listener содержит некорректный IPv4-адрес.';
+            }
+            if (!is_int($dnsListenerPort) || $dnsListenerPort < 1 || $dnsListenerPort > 65535) {
+                $errors[] = 'DNS listener содержит некорректный порт.';
+            }
+        }
+
         $policyOutbound = $plan['policy_outbound'] ?? null;
         $policyOutboundReady = null;
         if (!is_array($policyOutbound)) {
@@ -94,6 +112,11 @@ final class PolicyPlanValidator
             $type = $operation['type'] ?? null;
             if ($type === 'dns_redirect') {
                 self::validateDnsRedirect($operation, $captureMode, $errors);
+                if (($operation['target_address'] ?? null) !== $dnsListenerAddress
+                    || ($operation['target_port'] ?? null) !== $dnsListenerPort
+                ) {
+                    $errors[] = 'DNS redirect не согласован с DNS listener policy-плана.';
+                }
             } elseif ($type === 'policy_route') {
                 self::validatePolicyRoute($operation, $errors);
                 $policyRoutes[] = ['index' => $operationIndex, 'operation' => $operation];

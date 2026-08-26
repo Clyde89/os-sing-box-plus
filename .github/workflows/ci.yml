@@ -30,6 +30,8 @@ jobs:
           test -f tests/migrate-legacy-cases.sh
           test -f tests/service-lifecycle-static.sh
           test -f tests/service-policy-lifecycle.sh
+          test -f tests/service-readiness-lifecycle.sh
+          test -f tests/policy-readiness.sh
           test -f tests/package-install-static.sh
           test -f tests/package-lifecycle.sh
           test -f tests/webui-safety-static.sh
@@ -57,6 +59,7 @@ jobs:
           test -x src/usr/local/sbin/sing-box-logctl
           test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
           test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
+          test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/DomainListField.php
@@ -93,6 +96,7 @@ jobs:
           grep -q 'Runtime/SelectorCompiler.php' build.sh
           grep -q 'Runtime/PolicyPlanBuilder.php' build.sh
           grep -q 'Runtime/PolicyPlanValidator.php' build.sh
+          grep -q 'policy_readiness.php' build.sh
           grep -q 'Runtime/FirewallRuleBuilder.php' build.sh
           grep -q 'FieldTypes/CaptureInterfaceField.php' build.sh
           grep -q 'FieldTypes/FakeIpRangeField.php' build.sh
@@ -197,6 +201,12 @@ jobs:
           set -euo pipefail
           sh tests/service-policy-lifecycle.sh
 
+      - name: Проверка readiness-gating перед firewall
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/service-readiness-lifecycle.sh
+
       - name: Проверка безопасного состояния установки пакета
         shell: bash
         run: |
@@ -284,6 +294,12 @@ jobs:
         run: |
           set -euo pipefail
           php tests/policy-plan-validator.php
+
+      - name: Проверка TCP/UDP readiness DNS listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/policy-readiness.sh
 
       - name: Проверка генерации firewall-правил OPNsense
         shell: bash

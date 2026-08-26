@@ -67,6 +67,14 @@ $wrongPort = $plan;
 $wrongPort['operations'][0]['destination_port'] = 853;
 assertPolicyInvalid($wrongPort, 'Перехват порта, отличного от DNS/53');
 
+$invalidListener = $plan;
+$invalidListener['dns_listener']['port'] = 70000;
+assertPolicyInvalid($invalidListener, 'Некорректный порт DNS listener');
+
+$mismatchedListener = $plan;
+$mismatchedListener['dns_listener']['address'] = '192.0.2.2';
+assertPolicyInvalid($mismatchedListener, 'DNS redirect не согласован с DNS listener');
+
 $missingSource = $plan;
 $missingSource['operations'][0]['source_ip_cidr'] = [];
 assertPolicyInvalid($missingSource, 'Selected DNS redirect без source selector');

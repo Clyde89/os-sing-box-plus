@@ -23,6 +23,8 @@ managed_policy="${state_dir}/managed-policy"
 policy_plan="${state_dir}/policy-plan.json"
 tun_interface_file="${state_dir}/tun-interface"
 policy_active="/var/run/sing-box-policy-active"
+policy_readiness_helper="/usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php"
+php_binary="/usr/local/bin/php"
 
 # shellcheck disable=SC2034
 start_cmd="${name}_start"
@@ -106,8 +108,63 @@ reload_firewall() {
     configctl filter reload >/dev/null 2>&1
 }
 
+wait_for_policy_readiness() {
+    readiness_pid="$1"
+    [ -f "$managed_policy" ] || return 0
+
+    if [ ! -x "$php_binary" ] || [ ! -r "$policy_readiness_helper" ]; then
+        echo "Проверка readiness DNS listener недоступна."
+        return 1
+    fi
+
+    attempts="${policy_readiness_attempts:-15}"
+    case "$attempts" in
+        ''|*[!0-9]*|0) attempts=15 ;;
+    esac
+
+    readiness_output=""
+    while [ "$attempts" -gt 0 ]; do
+        if readiness_output="$(
+            "$php_binary" "$policy_readiness_helper" --plan "$policy_plan" --pid "$readiness_pid" 2>&1
+        )"; then
+            return 0
+        else
+            readiness_status=$?
+        fi
+
+        if [ "$readiness_status" -ne 75 ]; then
+            [ -z "$readiness_output" ] || echo "$readiness_output"
+            return 1
+        fi
+        if ! process_is_sing_box "$readiness_pid"; then
+            echo "Процесс sing-box завершился во время проверки readiness DNS listener."
+            return 1
+        fi
+
+        attempts=$((attempts - 1))
+        [ "$attempts" -gt 0 ] || break
+        sleep 1
+    done
+
+    [ -z "$readiness_output" ] || echo "$readiness_output"
+    echo "DNS listener sing-box не стал готов до firewall-активации."
+    return 1
+}
+
 activate_policy_rules() {
     if [ -f "$managed_policy" ] && [ -r "$policy_plan" ]; then
+        policy_pid="${1:-}"
+        case "$policy_pid" in
+            ''|*[!0-9]*)
+                echo "Не удалось подтвердить PID sing-box перед firewall-активацией."
+                return 1
+                ;;
+        esac
+        if ! wait_for_policy_readiness "$policy_pid"; then
+            echo "Управляемые правила firewall не активированы: DNS listener не готов."
+            return 1
+        fi
+
         policy_checksum="$(sha256 -q "$policy_plan" 2>/dev/null || true)"
         if [ -z "$policy_checksum" ]; then
             echo "Не удалось вычислить SHA-256 управляемого policy-плана."
@@ -203,7 +260,7 @@ sing_box_start() {
                 echo "Процесс sing-box уже запущен, но интерфейс $tun_interface отсутствует."
                 return 1
             fi
-            if ! activate_policy_rules; then
+            if ! activate_policy_rules "$existing_pid"; then
                 echo "Служба sing-box запущена, но управляемые правила firewall не активированы."
                 return 1
             fi
@@ -266,7 +323,7 @@ sing_box_start() {
         return 1
     fi
 
-    if ! activate_policy_rules; then
+    if ! activate_policy_rules "$started_pid"; then
         echo "Запуск sing-box отменён: управляемые правила firewall не активированы."
         cleanup_failed_start "$started_pid"
         return 1
