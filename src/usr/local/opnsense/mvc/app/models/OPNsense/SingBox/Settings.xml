@@ -1,7 +1,7 @@
 <model>
     <mount>//OPNsense/SingBox/settings</mount>
     <description>Структурированные настройки sing-box</description>
-    <version>1.3.0</version>
+    <version>1.4.0</version>
     <items>
         <capture>
             <mode type="OptionField">
@@ -36,6 +36,33 @@
                 <Default>198.18.0.0/15</Default>
                 <Required>Y</Required>
             </fakeIpRange>
+            <policyUpstreamType type="OptionField">
+                <Default>https</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <https>DNS over HTTPS</https>
+                </OptionValues>
+            </policyUpstreamType>
+            <policyUpstreamAddress type="NetworkField">
+                <Required>N</Required>
+                <NetMaskAllowed>N</NetMaskAllowed>
+                <WildcardEnabled>N</WildcardEnabled>
+            </policyUpstreamAddress>
+            <policyUpstreamPort type="PortField">
+                <Default>443</Default>
+                <Required>Y</Required>
+            </policyUpstreamPort>
+            <policyUpstreamTlsServerName type="TextField">
+                <Required>N</Required>
+                <Mask>/^[A-Za-z0-9.-]{1,253}$/</Mask>
+                <ValidationMessage>Укажите корректное TLS-имя DNS-сервера.</ValidationMessage>
+            </policyUpstreamTlsServerName>
+            <policyUpstreamPath type="TextField">
+                <Default>/dns-query</Default>
+                <Required>Y</Required>
+                <Mask>/^\/[A-Za-z0-9._~%\/-]*$/</Mask>
+                <ValidationMessage>Путь DoH должен начинаться с символа / и не содержать пробелов.</ValidationMessage>
+            </policyUpstreamPath>
         </dns>
         <policy>
             <outboundMode type="OptionField">

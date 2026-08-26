@@ -66,6 +66,7 @@ class SettingsController extends ApiMutableModelControllerBase
                 'selectors' => $plan['selectors'],
                 'policy_plan' => $plan['policy_plan'] ?? [],
                 'policy_sha256' => $plan['policy_sha256'] ?? null,
+                'dns_bootstrap' => $plan['dns_bootstrap'] ?? [],
                 'config' => $config,
                 'sha256' => hash('sha256', $config),
             ];

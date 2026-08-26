@@ -140,7 +140,12 @@ SH
       "listenAddress": "127.0.0.1",
       "listenPort": "55353",
       "redirectDomains": "example.org",
-      "fakeIpRange": "198.18.0.0/15"
+      "fakeIpRange": "198.18.0.0/15",
+      "policyUpstreamType": "https",
+      "policyUpstreamAddress": "203.0.113.53",
+      "policyUpstreamPort": "443",
+      "policyUpstreamTlsServerName": "dns.example.test",
+      "policyUpstreamPath": "/dns-query"
     },
     "policy": {
       "outboundMode": "direct_bind",
@@ -199,6 +204,7 @@ test_running_service_success()
     [ "$(restart_count)" -eq 1 ] || fail "работающая служба не была перезапущена один раз"
     assert_equal "$SCENARIO_DIR/expected-config.json" "$SCENARIO_CONFIG.bak"
     assert_log '"policy-out"' "$SCENARIO_CONFIG"
+    assert_log '"policy-dns-bootstrap"' "$SCENARIO_CONFIG"
     assert_log 'Служба sing-box перезапущена, policy-состояние подтверждено.' "$SCENARIO_STDOUT"
     assert_absent "$SCENARIO_STATE/filter-reload.pending"
     expected="$(sha256sum "$SCENARIO_STATE/policy-plan.json" | awk '{print $1}')"

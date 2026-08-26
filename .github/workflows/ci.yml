@@ -116,11 +116,16 @@ jobs:
           grep -Fq '<redirectDomains type=".\DomainListField"/>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -Fq '<fakeIpRange type=".\FakeIpRangeField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<Default>198.18.0.0/15</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<version>1.4.0</version>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<policyUpstreamAddress type="NetworkField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<policyUpstreamPort type="PortField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<Default>selected</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           grep -q '<id>settings.capture.interfaces</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q '<id>settings.capture.clients</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q '<id>settings.dns.redirectDomains</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q '<id>settings.dns.fakeIpRange</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q '<id>settings.dns.policyUpstreamAddress</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q '<id>settings.dns.policyUpstreamTlsServerName</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
           grep -q 'validateCaptureInterfaces' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
           grep -q 'validateIpv4Network' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
           grep -q 'function previewAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php

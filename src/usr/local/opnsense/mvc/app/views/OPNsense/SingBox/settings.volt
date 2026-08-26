@@ -36,6 +36,7 @@
             const dnsRedirect = plan.dns_redirect || {};
             const fakeIpRoute = plan.fakeip_route || {};
             const policyOutbound = plan.policy_outbound || {};
+            const dnsBootstrap = data && data.dns_bootstrap ? data.dns_bootstrap : {};
             const requirements = [];
 
             if (plan.requires_opnsense_dns_redirect === true) {
@@ -46,6 +47,9 @@
             }
             if (plan.requires_policy_outbound === true) {
                 requirements.push('Policy outbound для выбранного трафика');
+            }
+            if (dnsBootstrap.required === true) {
+                requirements.push('Отдельный bootstrap transport для policy DNS');
             }
             if (requirements.length === 0) {
                 requirements.push('Дополнительные policy-компоненты не требуются');
@@ -62,6 +66,14 @@
             const outboundText = policyOutbound.required === true
                 ? (policyOutbound.ready === true ? 'Готов' : 'Требует настройки')
                 : 'Не требуется';
+            const dnsBootstrapText = dnsBootstrap.required === true
+                ? (dnsBootstrap.ready === true
+                    ? (dnsBootstrap.transport || 'DNS') + ' ' +
+                        (dnsBootstrap.server_address || 'не задано') + ':' +
+                        (dnsBootstrap.server_port || 'не задано') + ' через ' +
+                        (dnsBootstrap.bootstrap_outbound_tag || 'bootstrap outbound')
+                    : 'Требует настройки')
+                : 'Не требуется';
 
             $('#policyManagementState').text(managementStateLabel(data.management_state));
             $('#policyCaptureMode').text(captureModeLabel(plan.capture_mode));
@@ -73,6 +85,7 @@
             $('#policyDnsRedirect').text(dnsRedirectText);
             $('#policyFakeIpRoute').text(fakeIpRouteText);
             $('#policyOutbound').text(outboundText);
+            $('#policyDnsBootstrap').text(dnsBootstrapText);
             $('#policyOperationCount').text(String(operations.length));
             $('#policyPlanState').text(plan.ready === true ? 'Готов' : (plan.required === true ? 'Требует завершения настройки' : 'Дополнительные правила не требуются'));
 
@@ -199,6 +212,7 @@
                 <dt>DNS redirect</dt><dd id="policyDnsRedirect"></dd>
                 <dt>Маршрут FakeIP</dt><dd id="policyFakeIpRoute"></dd>
                 <dt>Policy outbound</dt><dd id="policyOutbound"></dd>
+                <dt>Policy DNS bootstrap</dt><dd id="policyDnsBootstrap"></dd>
                 <dt>Операций OPNsense</dt><dd id="policyOperationCount"></dd>
             </dl>
             <strong>Необходимые компоненты:</strong>

@@ -45,6 +45,40 @@
         <help>Диапазон адресов, выдаваемых FakeIP для выбранных доменов. Рекомендуется оставить 198.18.0.0/15, если эта сеть не используется в локальной инфраструктуре.</help>
     </field>
     <field>
+        <id>settings.dns.policyUpstreamAddress</id>
+        <label>IPv4-адрес policy DNS</label>
+        <type>text</type>
+        <help>IPv4-адрес upstream DNS для выбранных доменов. Числовой адрес исключает рекурсивную DNS-зависимость bootstrap-соединения.</help>
+    </field>
+    <field>
+        <id>settings.dns.policyUpstreamType</id>
+        <label>Транспорт policy DNS</label>
+        <type>dropdown</type>
+        <advanced>true</advanced>
+        <help>Для policy-bound DNS используется отдельный DNS over HTTPS transport.</help>
+    </field>
+    <field>
+        <id>settings.dns.policyUpstreamPort</id>
+        <label>Порт policy DNS</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>TCP-порт upstream DNS over HTTPS.</help>
+    </field>
+    <field>
+        <id>settings.dns.policyUpstreamTlsServerName</id>
+        <label>TLS-имя policy DNS</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Имя для SNI и проверки сертификата. Поле можно оставить пустым, если сертификат upstream DNS содержит его IPv4-адрес.</help>
+    </field>
+    <field>
+        <id>settings.dns.policyUpstreamPath</id>
+        <label>Путь policy DNS over HTTPS</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>HTTP-путь DNS over HTTPS. Стандартное значение — /dns-query.</help>
+    </field>
+    <field>
         <id>settings.policy.outboundMode</id>
         <label>Режим policy outbound</label>
         <type>dropdown</type>
