@@ -15,7 +15,11 @@ use OPNsense\SingBox\Settings;
 
 const TARGET_CONFIG = '/usr/local/etc/sing-box/config.json';
 const SING_BOX_BINARY = '/usr/local/bin/sing-box';
+const SERVICE_BINARY = '/usr/sbin/service';
+const PID_FILE = '/var/run/sing-box.pid';
+const POLICY_ACTIVE_FILE = '/var/run/sing-box-policy-active';
 const STATE_DIRECTORY = '/var/db/os-sing-box';
+const APPLY_LOCK_FILE = STATE_DIRECTORY . '/apply.lock';
 const SETUP_REQUIRED_FILE = STATE_DIRECTORY . '/setup-required';
 const MANAGED_CONFIG_FILE = STATE_DIRECTORY . '/managed-config';
 const MANAGED_POLICY_FILE = STATE_DIRECTORY . '/managed-policy';
@@ -63,6 +67,32 @@ function ensureStateDirectory(): void
     }
 }
 
+function acquireApplyLock()
+{
+    ensureStateDirectory();
+    $handle = @fopen(APPLY_LOCK_FILE, 'c');
+    if ($handle === false) {
+        raiseRuntime('Не удалось открыть блокировку применения runtime-конфигурации.', 73);
+    }
+    if (!@chmod(APPLY_LOCK_FILE, 0600)) {
+        @fclose($handle);
+        raiseRuntime('Не удалось установить безопасные права блокировки применения.', 73);
+    }
+    if (!@flock($handle, LOCK_EX | LOCK_NB)) {
+        @fclose($handle);
+        raiseRuntime('Другая операция применения runtime-конфигурации уже выполняется.', 75);
+    }
+    return $handle;
+}
+
+function releaseApplyLock($handle): void
+{
+    if (is_resource($handle)) {
+        @flock($handle, LOCK_UN);
+        @fclose($handle);
+    }
+}
+
 function writeStateFile(string $path, string $content): void
 {
     ensureStateDirectory();
@@ -107,18 +137,21 @@ function restoreStateFile(string $path, array $snapshot): void
 {
     if (($snapshot['exists'] ?? false) === true) {
         writeStateFile($path, (string)($snapshot['content'] ?? ''));
-    } else {
-        @unlink($path);
+    } elseif (is_file($path) && !@unlink($path)) {
+        throw new \RuntimeException('Не удалось удалить новый файл managed-состояния при откате.');
     }
 }
 
 function capturePolicyState(): array
 {
     return [
+        SETUP_REQUIRED_FILE => snapshotStateFile(SETUP_REQUIRED_FILE),
+        MANAGED_CONFIG_FILE => snapshotStateFile(MANAGED_CONFIG_FILE),
         POLICY_PLAN_FILE => snapshotStateFile(POLICY_PLAN_FILE),
         MANAGED_POLICY_FILE => snapshotStateFile(MANAGED_POLICY_FILE),
         POLICY_RELOAD_PENDING_FILE => snapshotStateFile(POLICY_RELOAD_PENDING_FILE),
         TUN_INTERFACE_FILE => snapshotStateFile(TUN_INTERFACE_FILE),
+        POLICY_ACTIVE_FILE => snapshotStateFile(POLICY_ACTIVE_FILE),
     ];
 }
 
@@ -144,6 +177,10 @@ function applyPolicyState(array $runtimePlan): string
 
     writeStateFile(TUN_INTERFACE_FILE, $tunInterface . PHP_EOL);
 
+    if (is_file(POLICY_ACTIVE_FILE) && !@unlink(POLICY_ACTIVE_FILE)) {
+        raiseRuntime('Не удалось сбросить прежний маркер активного policy-плана.', 74);
+    }
+
     if (($policyPlan['required'] ?? false) === true) {
         if (($policyPlan['ready'] ?? false) !== true || ($policyPlan['confirmation_required'] ?? false) === true) {
             raiseRuntime('Policy-план не готов к безопасной активации.', 65);
@@ -164,8 +201,12 @@ function applyPolicyState(array $runtimePlan): string
         return hash('sha256', $json);
     }
 
-    @unlink(POLICY_PLAN_FILE);
-    @unlink(MANAGED_POLICY_FILE);
+    if (is_file(POLICY_PLAN_FILE) && !@unlink(POLICY_PLAN_FILE)) {
+        raiseRuntime('Не удалось удалить прежний policy-план.', 74);
+    }
+    if (is_file(MANAGED_POLICY_FILE) && !@unlink(MANAGED_POLICY_FILE)) {
+        raiseRuntime('Не удалось отключить управляемое policy-состояние.', 74);
+    }
     writeStateFile(POLICY_RELOAD_PENDING_FILE, "pending\n");
     return hash('sha256', '');
 }
@@ -173,12 +214,132 @@ function applyPolicyState(array $runtimePlan): string
 function restorePreviousConfig(string $backupFile, bool $hadPreviousConfig): void
 {
     if ($hadPreviousConfig && is_file($backupFile)) {
-        @copy($backupFile, TARGET_CONFIG);
-        @chmod(TARGET_CONFIG, 0600);
+        if (!@copy($backupFile, TARGET_CONFIG) || !@chmod(TARGET_CONFIG, 0600)) {
+            throw new \RuntimeException('Не удалось восстановить предыдущую runtime-конфигурацию.');
+        }
         return;
     }
 
-    @unlink(TARGET_CONFIG);
+    if (is_file(TARGET_CONFIG) && !@unlink(TARGET_CONFIG)) {
+        throw new \RuntimeException('Не удалось удалить новую runtime-конфигурацию при откате.');
+    }
+}
+
+function runServiceCommand(string $action): array
+{
+    if (!is_executable(SERVICE_BINARY)) {
+        raiseRuntime('Системная команда service отсутствует или недоступна.', 69);
+    }
+
+    $command = escapeshellarg(SERVICE_BINARY) . ' sing-box ' . escapeshellarg($action) . ' 2>&1';
+    $output = [];
+    $status = 0;
+    exec($command, $output, $status);
+
+    return [$status, trim(implode("\n", $output))];
+}
+
+function pidFileProcessIsAlive(): bool
+{
+    if (!is_readable(PID_FILE)) {
+        return false;
+    }
+
+    $pid = trim((string)file_get_contents(PID_FILE));
+    if ($pid === '' || preg_match('/^[0-9]+$/', $pid) !== 1) {
+        return false;
+    }
+
+    $output = [];
+    $status = 0;
+    exec('/bin/kill -0 ' . escapeshellarg($pid) . ' 2>/dev/null', $output, $status);
+    return $status === 0;
+}
+
+function serviceWasRunning(): bool
+{
+    [$status] = runServiceCommand('status');
+    if ($status === 0) {
+        return true;
+    }
+    if (pidFileProcessIsAlive()) {
+        return true;
+    }
+    if ($status === 1) {
+        return false;
+    }
+
+    raiseRuntime('Не удалось определить исходное состояние службы sing-box.', 69);
+}
+
+function restartService(): void
+{
+    [$status, $details] = runServiceCommand('restart');
+    if ($status !== 0) {
+        raiseRuntime(
+            'Не удалось перезапустить sing-box после применения runtime-конфигурации.' .
+            ($details !== '' ? ' ' . $details : ''),
+            69
+        );
+    }
+}
+
+function assertPolicyActivation(array $runtimePlan): void
+{
+    $policyPlan = $runtimePlan['policy_plan'] ?? null;
+    if (!is_array($policyPlan)) {
+        raiseRuntime('Runtime-план не содержит policy-план для проверки активации.', 65);
+    }
+
+    if (($policyPlan['required'] ?? false) !== true) {
+        if (is_file(POLICY_ACTIVE_FILE)) {
+            raiseRuntime('После перезапуска сохранился неожиданный активный policy-план.', 69);
+        }
+        return;
+    }
+
+    if (!is_readable(POLICY_PLAN_FILE) || !is_readable(POLICY_ACTIVE_FILE)) {
+        raiseRuntime('Управляемый policy-план не был активирован после перезапуска sing-box.', 69);
+    }
+
+    $expected = hash_file('sha256', POLICY_PLAN_FILE);
+    $actual = trim((string)file_get_contents(POLICY_ACTIVE_FILE));
+    if (!is_string($expected) || $expected === '' || $actual === '' || !hash_equals($expected, $actual)) {
+        raiseRuntime('Контрольная сумма активного policy-плана не совпала с применённым состоянием.', 69);
+    }
+}
+
+function rollbackAppliedRuntime(
+    string $backupFile,
+    bool $hadPreviousConfig,
+    array $policySnapshot,
+    bool $restartPreviousService
+): array {
+    $errors = [];
+
+    try {
+        restorePreviousConfig($backupFile, $hadPreviousConfig);
+    } catch (\Throwable $error) {
+        $errors[] = $error->getMessage();
+    }
+
+    try {
+        restorePolicyState($policySnapshot);
+    } catch (\Throwable $error) {
+        $errors[] = 'Не удалось восстановить предыдущее managed-состояние.';
+    }
+
+    if ($restartPreviousService && $errors === []) {
+        try {
+            restartService();
+        } catch (\Throwable $error) {
+            $errors[] = 'Не удалось повторно запустить sing-box с восстановленной конфигурацией.';
+        }
+    } elseif ($restartPreviousService) {
+        $errors[] = 'Восстановительный перезапуск пропущен из-за неполного отката файлов.';
+    }
+
+    return $errors;
 }
 
 function ensureManagedState(): bool
@@ -192,15 +353,19 @@ function ensureManagedState(): bool
 }
 
 $tempFile = '';
-$managedMarkerCreated = false;
 $policySnapshot = [];
-$policyStateChanged = false;
+$transactionStarted = false;
+$lockHandle = null;
+$hadPreviousConfig = false;
+$serviceRunningBeforeApply = false;
+$backupFile = TARGET_CONFIG . '.bak';
 
 try {
     if ($argc !== 2 || $argv[1] !== 'apply') {
         raiseRuntime('Поддерживается только действие apply.', 64);
     }
 
+    $lockHandle = acquireApplyLock();
     $hadPreviousConfig = is_file(TARGET_CONFIG);
     $initialSetup = is_file(SETUP_REQUIRED_FILE);
     $managedConfig = is_file(MANAGED_CONFIG_FILE);
@@ -225,7 +390,6 @@ try {
 
     $config = RuntimeConfigBuilder::encodeConfig($plan);
     $directory = dirname(TARGET_CONFIG);
-    $backupFile = TARGET_CONFIG . '.bak';
 
     if (!is_dir($directory) || !is_writable($directory)) {
         raiseRuntime('Каталог runtime-конфигурации недоступен для записи.', 73);
@@ -250,6 +414,7 @@ try {
     }
 
     validateRuntimeConfig($tempFile);
+    $serviceRunningBeforeApply = serviceWasRunning();
 
     if ($hadPreviousConfig) {
         if (!@copy(TARGET_CONFIG, $backupFile)) {
@@ -262,6 +427,7 @@ try {
     }
 
     $policySnapshot = capturePolicyState();
+    $transactionStarted = true;
 
     if (!@rename($tempFile, TARGET_CONFIG)) {
         raiseRuntime('Не удалось атомарно заменить runtime-конфигурацию.', 74);
@@ -269,60 +435,71 @@ try {
     $tempFile = '';
 
     if (!@chmod(TARGET_CONFIG, 0600)) {
-        restorePreviousConfig($backupFile, $hadPreviousConfig);
-        raiseRuntime('Не удалось подтвердить безопасные права runtime-конфигурации; предыдущее состояние восстановлено.', 74);
+        raiseRuntime('Не удалось подтвердить безопасные права runtime-конфигурации.', 74);
     }
 
-    try {
-        $policySha256 = applyPolicyState($plan);
-        $policyStateChanged = true;
-        $managedMarkerCreated = ensureManagedState();
-    } catch (Throwable $error) {
-        restorePreviousConfig($backupFile, $hadPreviousConfig);
-        restorePolicyState($policySnapshot);
-        throw $error;
-    }
+    $policySha256 = applyPolicyState($plan);
+    ensureManagedState();
 
     if ($initialSetup && !@unlink(SETUP_REQUIRED_FILE)) {
-        if ($managedMarkerCreated) {
-            @unlink(MANAGED_CONFIG_FILE);
-            $managedMarkerCreated = false;
-        }
-        restorePreviousConfig($backupFile, $hadPreviousConfig);
-        restorePolicyState($policySnapshot);
-        $policyStateChanged = false;
-        raiseRuntime('Не удалось завершить первоначальную настройку; предыдущее состояние восстановлено.', 74);
+        raiseRuntime('Не удалось завершить первоначальную настройку.', 74);
     }
 
-    echo 'OK Runtime-конфигурация sing-box применена. SHA256=' . hash('sha256', $config)
+    if ($serviceRunningBeforeApply) {
+        restartService();
+        assertPolicyActivation($plan);
+    }
+
+    $transactionStarted = false;
+    releaseApplyLock($lockHandle);
+    $lockHandle = null;
+    $activationMessage = $serviceRunningBeforeApply
+        ? ' Служба sing-box перезапущена, policy-состояние подтверждено.'
+        : ' Служба sing-box оставалась остановленной; активация отложена до следующего запуска.';
+    echo 'OK Runtime-конфигурация sing-box применена.' . $activationMessage
+        . ' SHA256=' . hash('sha256', $config)
         . ' POLICY_SHA256=' . $policySha256
-        . ' RESTART_REQUIRED=YES' . PHP_EOL;
+        . PHP_EOL;
     exit(0);
 } catch (RuntimeApplyException $error) {
     if ($tempFile !== '') {
         @unlink($tempFile);
     }
-    if ($policyStateChanged && $policySnapshot !== []) {
-        try {
-            restorePolicyState($policySnapshot);
-        } catch (Throwable $restoreError) {
-            // Основная ошибка применения важнее вторичной ошибки восстановления состояния.
-        }
+    $rollbackErrors = [];
+    if ($transactionStarted) {
+        $rollbackErrors = rollbackAppliedRuntime(
+            $backupFile,
+            $hadPreviousConfig,
+            $policySnapshot,
+            $serviceRunningBeforeApply
+        );
+        $transactionStarted = false;
     }
-    fwrite(STDERR, 'ERROR ' . $error->getMessage() . PHP_EOL);
+    releaseApplyLock($lockHandle);
+    $rollbackMessage = $rollbackErrors !== []
+        ? ' Откат завершился неполностью: ' . implode(' ', $rollbackErrors)
+        : '';
+    fwrite(STDERR, 'ERROR ' . $error->getMessage() . $rollbackMessage . PHP_EOL);
     $code = $error->getCode();
     exit($code > 0 ? $code : 70);
 } catch (Throwable $error) {
     if ($tempFile !== '') {
         @unlink($tempFile);
     }
-    if ($policyStateChanged && $policySnapshot !== []) {
-        try {
-            restorePolicyState($policySnapshot);
-        } catch (Throwable $restoreError) {
-            // Основная ошибка применения важнее вторичной ошибки восстановления состояния.
-        }
+    $rollbackErrors = [];
+    if ($transactionStarted) {
+        $rollbackErrors = rollbackAppliedRuntime(
+            $backupFile,
+            $hadPreviousConfig,
+            $policySnapshot,
+            $serviceRunningBeforeApply
+        );
+        $transactionStarted = false;
     }
-    fwrite(STDERR, 'ERROR Неожиданная ошибка применения runtime-конфигурации.' . PHP_EOL);
+    releaseApplyLock($lockHandle);
+    $rollbackMessage = $rollbackErrors !== []
+        ? ' Откат завершился неполностью: ' . implode(' ', $rollbackErrors)
+        : '';
+    fwrite(STDERR, 'ERROR Неожиданная ошибка применения runtime-конфигурации.' . $rollbackMessage . PHP_EOL);
     exit(70);
 }

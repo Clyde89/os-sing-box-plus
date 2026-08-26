@@ -20,6 +20,8 @@ grep -Fq "chmod(\$backupFile, 0600)" "$SCRIPT"
 grep -Fq "rename(\$tempFile, TARGET_CONFIG)" "$SCRIPT"
 grep -Fq "chmod(TARGET_CONFIG, 0600)" "$SCRIPT"
 grep -q 'restorePreviousConfig' "$SCRIPT"
+grep -q 'acquireApplyLock' "$SCRIPT"
+grep -Fq 'flock($handle, LOCK_EX | LOCK_NB)' "$SCRIPT"
 grep -q 'SETUP_REQUIRED_FILE' "$SCRIPT"
 grep -q 'MANAGED_CONFIG_FILE' "$SCRIPT"
 grep -q 'MANAGED_POLICY_FILE' "$SCRIPT"
@@ -33,11 +35,17 @@ grep -q 'PolicyPlanValidator::assertValid' "$SCRIPT"
 grep -q '^function capturePolicyState' "$SCRIPT"
 grep -q '^function restorePolicyState' "$SCRIPT"
 grep -q '^function applyPolicyState' "$SCRIPT"
+grep -q '^function serviceWasRunning' "$SCRIPT"
+grep -q '^function restartService' "$SCRIPT"
+grep -q '^function assertPolicyActivation' "$SCRIPT"
+grep -q '^function rollbackAppliedRuntime' "$SCRIPT"
 grep -Fq 'writeStateFile(POLICY_PLAN_FILE, $json)' "$SCRIPT"
 grep -Fq 'writeStateFile(MANAGED_POLICY_FILE, "managed\n")' "$SCRIPT"
 grep -Fq 'writeStateFile(POLICY_RELOAD_PENDING_FILE, "pending\n")' "$SCRIPT"
 grep -Fq 'writeStateFile(TUN_INTERFACE_FILE, $tunInterface . PHP_EOL)' "$SCRIPT"
 grep -Fq 'restorePolicyState($policySnapshot)' "$SCRIPT"
+grep -Fq 'POLICY_ACTIVE_FILE => snapshotStateFile(POLICY_ACTIVE_FILE)' "$SCRIPT"
+grep -Fq 'Восстановительный перезапуск пропущен из-за неполного отката файлов.' "$SCRIPT"
 grep -Fq "(\$policyPlan['confirmation_required'] ?? false) === true" "$SCRIPT"
 grep -q '^\[apply\]$' "$ACTIONS"
 grep -q 'runtime_config.php apply' "$ACTIONS"
@@ -46,14 +54,14 @@ grep -q 'runtimeOwnership' "$CONTROLLER"
 grep -q "'management_state'" "$CONTROLLER"
 grep -q "configdRun('sing-box apply')" "$CONTROLLER"
 
-if grep -Eq 'service[[:space:]]+sing-box|configctl[[:space:]]+filter' "$SCRIPT"; then
-    echo "Применение runtime-конфигурации не должно автоматически перезапускать службу или firewall" >&2
-    exit 1
-fi
+grep -Fq "runServiceCommand('restart')" "$SCRIPT"
+grep -Fq 'assertPolicyActivation($plan)' "$SCRIPT"
+grep -Fq 'rollbackAppliedRuntime(' "$SCRIPT"
+grep -Fq 'Служба sing-box перезапущена, policy-состояние подтверждено.' "$SCRIPT"
 
 if grep -q 'file_put_contents(TARGET_CONFIG' "$SCRIPT"; then
     echo "Runtime-конфигурация не должна записываться напрямую в целевой файл до проверки" >&2
     exit 1
 fi
 
-echo "Транзакционное применение runtime-конфигурации и policy-плана проверено"
+echo "Транзакционное применение, перезапуск и откат runtime-конфигурации проверены"

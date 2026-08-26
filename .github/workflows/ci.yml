@@ -44,8 +44,10 @@ jobs:
           test -f tests/firewall-anchor-static.sh
           test -f tests/runtime-config-builder.php
           test -f tests/runtime-config-apply-static.sh
+          test -f tests/runtime-config-transaction.sh
           test -f tests/mvc-settings-ui-static.sh
           test -f tests/stubs/config.inc
+          test -f tests/stubs/runtime/config.inc
           test -f packaging/freebsd/+PRE_INSTALL
           test -f src/usr/local/etc/sing-box/config.json.sample
           test -f src/usr/local/etc/sing-box/readiness.conf.sample
@@ -306,6 +308,12 @@ jobs:
         run: |
           set -euo pipefail
           sh tests/runtime-config-apply-static.sh
+
+      - name: Проверка транзакционного Apply и rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/runtime-config-transaction.sh
 
       - name: Проверка регистрации firewall-правил OPNsense
         shell: bash
