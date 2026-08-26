@@ -34,6 +34,10 @@ jobs:
           test -f tests/policy-readiness.sh
           test -f tests/package-install-static.sh
           test -f tests/package-lifecycle.sh
+          test -f tests/package-artifact-static.sh
+          test -f tests/package-artifact.sh
+          test -x tests/opnsense-regression.sh
+          test -f docs/RELEASE-CHECKLIST.md
           test -f tests/webui-safety-static.sh
           test -f tests/service-config.sh
           test -f tests/log-control.sh
@@ -230,6 +234,12 @@ jobs:
           set -euo pipefail
           sh tests/package-lifecycle.sh
 
+      - name: Проверка выпускного шлюза пакета и OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/package-artifact-static.sh
+
       - name: Проверка безопасности первоначальной настройки WebUI
         shell: bash
         run: |
@@ -267,12 +277,18 @@ jobs:
           set -euo pipefail
           sh tests/mvc-settings-ui-static.sh
 
-      - name: Установка PHP CLI
+      - name: Установка инструментов проверки
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y php-cli
+          sudo apt-get install -y php-cli libarchive-tools
+
+      - name: Проверка готового package-артефакта
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/package-artifact.sh
 
       - name: Проверка PHP
         shell: bash

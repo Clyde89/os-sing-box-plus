@@ -15,6 +15,7 @@ SING_BOX_ASSET="${SING_BOX_ASSET:-bsd-box-reF1nd-freebsd-amd64.xz}"
 SING_BOX_ASSET_SHA256="${SING_BOX_ASSET_SHA256:-3ba254d792964cd1005946354e0c8250a05955381bdcbd19f57265a339b199d7}"
 SING_BOX_SHA256="${SING_BOX_SHA256:-1da7e84757a5ff5d13d4154b4e4055ea5f99d069c2423687fe8165bf504be7d0}"
 SING_BOX_DOWNLOAD_URL="${SING_BOX_DOWNLOAD_URL:-https://github.com/Vincent-Loeng/bsd-box/releases/download/$SING_BOX_RELEASE/$SING_BOX_ASSET}"
+SING_BOX_LOCAL_ASSET="${SING_BOX_LOCAL_ASSET:-}"
 DOWNLOAD_TIMEOUT="${DOWNLOAD_TIMEOUT:-300}"
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
@@ -161,7 +162,7 @@ prepare_binary() {
     asset="$1"
     binary_url="$2"
     binary_dst="$3"
-    local_asset="$SCRIPT_DIR/src/usr/local/bin/$asset"
+    local_asset="${SING_BOX_LOCAL_ASSET:-$SCRIPT_DIR/src/usr/local/bin/$asset}"
     archive="$binary_dst.download"
     source_archive=""
 
@@ -184,6 +185,87 @@ prepare_binary() {
     echo "==> Проверена контрольная сумма бинарного файла sing-box $SING_BOX_RELEASE"
 }
 
+write_build_info() {
+    build_info_dir="$STAGEDIR/usr/local/share/os-sing-box"
+    build_info="$build_info_dir/build-info"
+
+    install -d -m 0755 "$build_info_dir"
+    {
+        printf 'format_version=1\n'
+        printf 'package_name=%s\n' "$PKG_NAME"
+        printf 'package_version=%s\n' "$VERSION"
+        printf 'package_origin=%s\n' "$ORIGIN"
+        printf 'core_release=%s\n' "$SING_BOX_RELEASE"
+        printf 'core_asset=%s\n' "$SING_BOX_ASSET"
+        printf 'core_asset_sha256=%s\n' "$SING_BOX_ASSET_SHA256"
+        printf 'core_binary_sha256=%s\n' "$SING_BOX_SHA256"
+    } > "$build_info"
+    chmod 0644 "$build_info"
+}
+
+verify_package_artifact() {
+    package_file="$1"
+    verify_root="$WORKDIR/package-verify"
+    archive_list="$WORKDIR/package-archive-list"
+
+    rm -rf "$verify_root"
+    mkdir -p "$verify_root"
+    tar -tf "$package_file" |
+        sed -e 's#^\./##' -e 's#^/##' -e 's#/$##' |
+        sort -u > "$archive_list"
+
+    if grep -Eq '(^|/)\.\.(/|$)' "$archive_list"; then
+        die "пакет содержит небезопасный путь с переходом в родительский каталог"
+    fi
+
+    while IFS= read -r required_file; do
+        [ -n "$required_file" ] || continue
+        if ! grep -Fxq "$required_file" "$archive_list"; then
+            die "в пакете отсутствует обязательный файл: /$required_file"
+        fi
+    done <<'EOF'
++COMPACT_MANIFEST
++MANIFEST
+usr/local/bin/sing-box
+usr/local/etc/rc.d/sing-box
+usr/local/etc/sing-box/config.json.sample
+usr/local/etc/sing-box/readiness.conf.sample
+usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php
+usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
+usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/NetworkPreflightValidator.php
+usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+usr/local/opnsense/mvc/app/views/OPNsense/SingBox/settings.volt
+usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
+usr/local/opnsense/version/sing-box
+usr/local/share/os-sing-box/build-info
+usr/local/share/licenses/os-sing-box/LICENSE.plugin
+usr/local/share/licenses/os-sing-box/LICENSE.opnsense
+usr/local/share/licenses/os-sing-box/LICENSE.sing-box
+EOF
+
+    if grep -Fxq 'usr/local/etc/sing-box/config.json' "$archive_list" \
+        || grep -Fxq 'usr/local/etc/sing-box/readiness.conf' "$archive_list"; then
+        die "пакет не должен владеть пользовательской runtime-конфигурацией"
+    fi
+
+    tar -xzf "$package_file" -C "$verify_root"
+    verify_sha256 \
+        "$verify_root/usr/local/bin/sing-box" \
+        "$SING_BOX_SHA256" \
+        "бинарного файла sing-box внутри готового пакета"
+
+    if ! cmp -s \
+        "$STAGEDIR/usr/local/share/os-sing-box/build-info" \
+        "$verify_root/usr/local/share/os-sing-box/build-info"; then
+        die "сведения о сборке внутри готового пакета не совпали со staged-версией"
+    fi
+
+    [ "$(stat -f '%Lp' "$verify_root/usr/local/bin/sing-box")" = "755" ] \
+        || die "бинарный файл sing-box внутри пакета имеет небезопасный режим доступа"
+    [ "$(stat -f '%Lp' "$verify_root/usr/local/share/os-sing-box/build-info")" = "644" ] \
+        || die "сведения о сборке внутри пакета имеют некорректный режим доступа"
+}
+
 echo "==> Подготавливаются файлы пакета"
 copy_tree "$SCRIPT_DIR/src" "$STAGEDIR"
 prepare_binary "$SING_BOX_ASSET" "$SING_BOX_DOWNLOAD_URL" "$DOWNLOADDIR/sing-box"
@@ -195,6 +277,7 @@ echo "==> Базовая конфигурация проверена sing-box $S
 
 mkdir -p "$STAGEDIR/usr/local/bin"
 install -m 0755 "$DOWNLOADDIR/sing-box" "$STAGEDIR/usr/local/bin/sing-box"
+write_build_info
 chmod 0700 "$STAGEDIR/usr/local/etc/sing-box"
 chmod 0644 "$STAGEDIR/usr/local/etc/sing-box/config.json.sample"
 chmod 0644 "$STAGEDIR/usr/local/etc/sing-box/readiness.conf.sample"
@@ -282,4 +365,6 @@ tar -cPzf "$DISTDIR/$OUTPUT_NAME" \
 echo "==> Пакет: $DISTDIR/$OUTPUT_NAME"
 pkg info -F "$DISTDIR/$OUTPUT_NAME" >/dev/null
 echo "==> Метаданные пакета проверены"
+verify_package_artifact "$DISTDIR/$OUTPUT_NAME"
+echo "==> Состав, происхождение и контрольная сумма ядра внутри пакета проверены"
 sha256 "$DISTDIR/$OUTPUT_NAME"
