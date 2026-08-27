@@ -36,6 +36,7 @@ jobs:
             make package
             pkg info -F dist/os-sing-box.pkg
             test -s dist/os-sing-box.pkg
+            tests/freebsd-package-upgrade.sh dist/os-sing-box.pkg
             sha256 dist/os-sing-box.pkg | tee dist/os-sing-box.pkg.sha256
 
       - name: Публикация проверенного package-артефакта

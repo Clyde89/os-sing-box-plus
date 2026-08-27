@@ -141,6 +141,43 @@ verify_sha256() {
     fi
 }
 
+verify_lifecycle_sources() {
+    for lifecycle_file in \
+        "$SCRIPT_DIR/packaging/freebsd/+PRE_INSTALL" \
+        "$SCRIPT_DIR/packaging/freebsd/+POST_INSTALL" \
+        "$SCRIPT_DIR/packaging/freebsd/+PRE_DEINSTALL" \
+        "$SCRIPT_DIR/packaging/freebsd/+POST_DEINSTALL"
+    do
+        /bin/sh -n "$lifecycle_file" \
+            || die "lifecycle-сценарий не прошёл shell syntax check: $lifecycle_file"
+    done
+
+    if grep -Eq '(^|[[:space:]])pkg[[:space:]]+(query|version)([[:space:]]|$)' \
+        "$SCRIPT_DIR/packaging/freebsd/+PRE_INSTALL"; then
+        die "PRE-INSTALL не должен рекурсивно запускать pkg внутри package-транзакции"
+    fi
+}
+
+verify_embedded_lifecycle() {
+    manifest="$1"
+    phase="$2"
+    source_file="$3"
+    embedded_file="$4"
+
+    awk -v marker="\"${phase}\": <<EOS" '
+        index($0, marker) {copy = 1; next}
+        copy && $0 == "EOS" {exit}
+        copy {print}
+    ' "$manifest" > "$embedded_file"
+
+    [ -s "$embedded_file" ] \
+        || die "в готовом пакете отсутствовал lifecycle-сценарий $phase"
+    /bin/sh -n "$embedded_file" \
+        || die "embedded lifecycle-сценарий $phase не прошёл shell syntax check"
+    cmp -s "$source_file" "$embedded_file" \
+        || die "embedded lifecycle-сценарий $phase отличался от исходного файла"
+}
+
 unpack_binary() {
     archive="$1"
     binary_dst="$2"
@@ -249,6 +286,26 @@ EOF
     fi
 
     tar -xzf "$package_file" -C "$verify_root"
+    verify_embedded_lifecycle \
+        "$verify_root/+MANIFEST" \
+        pre-install \
+        "$SCRIPT_DIR/packaging/freebsd/+PRE_INSTALL" \
+        "$verify_root/pre-install.embedded"
+    verify_embedded_lifecycle \
+        "$verify_root/+MANIFEST" \
+        post-install \
+        "$SCRIPT_DIR/packaging/freebsd/+POST_INSTALL" \
+        "$verify_root/post-install.embedded"
+    verify_embedded_lifecycle \
+        "$verify_root/+MANIFEST" \
+        pre-deinstall \
+        "$SCRIPT_DIR/packaging/freebsd/+PRE_DEINSTALL" \
+        "$verify_root/pre-deinstall.embedded"
+    verify_embedded_lifecycle \
+        "$verify_root/+MANIFEST" \
+        post-deinstall \
+        "$SCRIPT_DIR/packaging/freebsd/+POST_DEINSTALL" \
+        "$verify_root/post-deinstall.embedded"
     verify_sha256 \
         "$verify_root/usr/local/bin/sing-box" \
         "$SING_BOX_SHA256" \
@@ -266,6 +323,8 @@ EOF
         || die "сведения о сборке внутри пакета имеют некорректный режим доступа"
 }
 
+verify_lifecycle_sources
+echo "==> Lifecycle-сценарии прошли статическую проверку"
 echo "==> Подготавливаются файлы пакета"
 copy_tree "$SCRIPT_DIR/src" "$STAGEDIR"
 prepare_binary "$SING_BOX_ASSET" "$SING_BOX_DOWNLOAD_URL" "$DOWNLOADDIR/sing-box"
@@ -327,16 +386,16 @@ echo "==> Формируются метаданные"
     printf 'scripts: {\n'
     printf '    "pre-install": <<EOS\n'
     cat "$SCRIPT_DIR/packaging/freebsd/+PRE_INSTALL"
-    printf '\nEOS\n'
+    printf 'EOS\n'
     printf '    "post-install": <<EOS\n'
     cat "$SCRIPT_DIR/packaging/freebsd/+POST_INSTALL"
-    printf '\nEOS\n'
+    printf 'EOS\n'
     printf '    "pre-deinstall": <<EOS\n'
     cat "$SCRIPT_DIR/packaging/freebsd/+PRE_DEINSTALL"
-    printf '\nEOS\n'
+    printf 'EOS\n'
     printf '    "post-deinstall": <<EOS\n'
     cat "$SCRIPT_DIR/packaging/freebsd/+POST_DEINSTALL"
-    printf '\nEOS\n'
+    printf 'EOS\n'
     printf '}\n'
 } > "$METADIR/+MANIFEST"
 cp "$METADIR/+MANIFEST" "$METADIR/+COMPACT_MANIFEST"

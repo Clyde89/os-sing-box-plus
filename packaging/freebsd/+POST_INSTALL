@@ -16,12 +16,19 @@ LEGACY_CONFIG_SNAPSHOT="${MIGRATION_DIR}/config.xml.legacy"
 LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
 PENDING_FILTER_RELOAD="${MIGRATION_DIR}/filter-reload.pending"
 SETUP_REQUIRED_FILE="${MIGRATION_DIR}/setup-required"
+PRE_INSTALL_STARTED="${MIGRATION_DIR}/pre-install.started"
+PRE_INSTALL_COMPLETE="${MIGRATION_DIR}/pre-install.complete"
 LEGACY_MIGRATOR="/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php"
 legacy_migration_processed=0
 legacy_migration_failed=0
 fresh_configuration=0
 
 echo "===> Настраивается os-sing-box"
+
+if [ -f "$PRE_INSTALL_STARTED" ] || [ ! -f "$PRE_INSTALL_COMPLETE" ]; then
+    echo "Ошибка: PRE-INSTALL не подтвердил завершение сохранения исходного состояния" >&2
+    exit 1
+fi
 
 mkdir -p /etc/rc.conf.d
 if [ -f "$RC_STATE_FILE" ]; then
@@ -120,7 +127,13 @@ if [ "$legacy_migration_failed" -ne 0 ]; then
     exit 1
 fi
 
-rm -f "$MIGRATION_FILE" "$RC_STATE_FILE" "$LEGACY_CONFIG_SNAPSHOT" "$LEGACY_VERSION_FILE"
+rm -f \
+    "$MIGRATION_FILE" \
+    "$RC_STATE_FILE" \
+    "$LEGACY_CONFIG_SNAPSHOT" \
+    "$LEGACY_VERSION_FILE" \
+    "$PRE_INSTALL_STARTED" \
+    "$PRE_INSTALL_COMPLETE"
 rmdir "$MIGRATION_DIR" 2>/dev/null || true
 
 exit 0

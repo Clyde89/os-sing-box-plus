@@ -9,37 +9,41 @@ MIGRATION_FILE="${MIGRATION_DIR}/config.json.upgrade"
 RC_STATE_FILE="${MIGRATION_DIR}/sing_box.rc.upgrade"
 LEGACY_CONFIG_SNAPSHOT="${MIGRATION_DIR}/config.xml.legacy"
 LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
-LEGACY_CUTOFF_VERSION="1.0.2"
+PRE_INSTALL_STARTED="${MIGRATION_DIR}/pre-install.started"
+PRE_INSTALL_COMPLETE="${MIGRATION_DIR}/pre-install.complete"
 
 prepare_migration_dir()
 {
     install -d -o root -g wheel -m 0700 "$MIGRATION_DIR"
 }
 
+legacy_layout_present()
+{
+    [ -e /usr/local/www/services_sing_box.php ] \
+        || [ -e /usr/local/www/status_sing_box.php ] \
+        || [ -e /usr/local/opnsense/mvc/app/models/OPNsense/sing-box ]
+}
+
+prepare_migration_dir
+rm -f "$PRE_INSTALL_COMPLETE"
+: > "$PRE_INSTALL_STARTED"
+chmod 0600 "$PRE_INSTALL_STARTED"
+
 if [ -f "$CONFIG_FILE" ]; then
     echo "===> Сохраняется пользовательская конфигурация sing-box перед установкой"
-    prepare_migration_dir
     install -o root -g wheel -m 0600 "$CONFIG_FILE" "$MIGRATION_FILE"
 fi
 
 if [ -f "$RC_CONF_FILE" ]; then
     echo "===> Сохраняется состояние автозапуска sing-box перед установкой"
-    prepare_migration_dir
     install -o root -g wheel -m 0600 "$RC_CONF_FILE" "$RC_STATE_FILE"
 fi
 
-installed_version="$(pkg query '%v' os-sing-box 2>/dev/null || true)"
-comparison=""
-if [ -n "$installed_version" ]; then
-    comparison="$(pkg version -t "$installed_version" "$LEGACY_CUTOFF_VERSION" 2>/dev/null || true)"
-fi
-
-if [ "$comparison" = "<" ] || [ "$comparison" = "=" ]; then
-    echo "===> Сохраняется состояние OPNsense для миграции legacy-пакета os-sing-box $installed_version"
-    prepare_migration_dir
+if legacy_layout_present; then
+    echo "===> Сохраняется состояние OPNsense для миграции legacy-пакета os-sing-box"
 
     if [ ! -f "$LEGACY_VERSION_FILE" ]; then
-        printf '%s\n' "$installed_version" > "$LEGACY_VERSION_FILE"
+        printf '%s\n' 'legacy-layout' > "$LEGACY_VERSION_FILE"
         chmod 0600 "$LEGACY_VERSION_FILE"
     fi
 
@@ -49,3 +53,6 @@ if [ "$comparison" = "<" ] || [ "$comparison" = "=" ]; then
         echo "===> Сохранён ранее созданный исходный снимок legacy-конфигурации OPNsense"
     fi
 fi
+
+mv -f "$PRE_INSTALL_STARTED" "$PRE_INSTALL_COMPLETE"
+chmod 0600 "$PRE_INSTALL_COMPLETE"

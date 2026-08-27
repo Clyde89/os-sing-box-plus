@@ -124,33 +124,6 @@ if [ -n "$mode" ]; then
 fi
 SH
 
-    cat > "$MOCK_BIN/pkg" <<'SH'
-#!/bin/sh
-set -eu
-
-case "${1:-}" in
-    query)
-        [ "${MOCK_INSTALLED_VERSION:-}" != "" ] || exit 1
-        printf '%s\n' "$MOCK_INSTALLED_VERSION"
-        ;;
-    version)
-        [ "${2:-}" = "-t" ] || exit 64
-        installed="${3:-}"
-        cutoff="${4:-}"
-        if [ "$installed" = "$cutoff" ]; then
-            printf '=\n'
-        elif [ "$installed" = "1.0.1" ] && [ "$cutoff" = "1.0.2" ]; then
-            printf '<\n'
-        else
-            printf '>\n'
-        fi
-        ;;
-    *)
-        exit 64
-        ;;
-esac
-SH
-
     cat > "$MOCK_BIN/service" <<'SH'
 #!/bin/sh
 set -eu
@@ -186,7 +159,7 @@ if [ "${MOCK_PHP_FAIL:-0}" -eq 1 ]; then
 fi
 SH
 
-    chmod 0755 "$MOCK_BIN/install" "$MOCK_BIN/pkg" "$MOCK_BIN/service" \
+    chmod 0755 "$MOCK_BIN/install" "$MOCK_BIN/service" \
         "$MOCK_BIN/configctl" "$MOCK_BIN/chown" "$MOCK_BIN/php"
 }
 
@@ -200,6 +173,7 @@ prepare_scenario()
     mkdir -p \
         "$SCENARIO_ROOT/usr/local/etc/sing-box" \
         "$SCENARIO_ROOT/usr/local/bin" \
+        "$SCENARIO_ROOT/usr/local/www" \
         "$SCENARIO_ROOT/usr/local/opnsense/scripts/OPNsense/SingBox" \
         "$SCENARIO_ROOT/etc/rc.conf.d" \
         "$SCENARIO_ROOT/conf"
@@ -245,6 +219,8 @@ seed_legacy_installation()
         "$SCENARIO_ROOT/etc/rc.conf.d/sing_box"
     printf '<opnsense><marker>%s</marker></opnsense>\n' "$state" > \
         "$SCENARIO_ROOT/conf/config.xml"
+    printf '%s\n' 'legacy-webui' > \
+        "$SCENARIO_ROOT/usr/local/www/services_sing_box.php"
 
     cp "$SCENARIO_ROOT/usr/local/etc/sing-box/config.json" \
         "$SCENARIO_DIR/expected-config.json"
@@ -256,10 +232,7 @@ seed_legacy_installation()
 
 run_pre_install()
 {
-    installed_version="$1"
-
-    MOCK_INSTALLED_VERSION="$installed_version" \
-        MOCK_LOG="$SCENARIO_LOG" \
+    MOCK_LOG="$SCENARIO_LOG" \
         PATH="$MOCK_BIN:/usr/bin:/bin" \
         sh "$SCENARIO_DIR/pre-install"
 }
@@ -293,13 +266,15 @@ assert_migration_preserved()
     assert_file "$migration_dir/sing_box.rc.upgrade"
     assert_file "$migration_dir/config.xml.legacy"
     assert_file "$migration_dir/legacy-version"
+    assert_file "$migration_dir/pre-install.complete"
+    assert_absent "$migration_dir/pre-install.started"
 }
 
 test_successful_enabled_upgrade()
 {
     prepare_scenario successful-enabled-upgrade
     seed_legacy_installation YES
-    run_pre_install 1.0.1
+    run_pre_install
 
     migration_dir="$SCENARIO_ROOT/var/db/os-sing-box"
     assert_mode 700 "$migration_dir"
@@ -310,12 +285,12 @@ test_successful_enabled_upgrade()
     assert_mode 600 "$migration_dir/sing_box.rc.upgrade"
     assert_mode 600 "$migration_dir/config.xml.legacy"
     assert_mode 600 "$migration_dir/legacy-version"
-    [ "$(cat "$migration_dir/legacy-version")" = "1.0.1" ] || \
-        fail "версия legacy-пакета не была сохранена"
+    [ "$(cat "$migration_dir/legacy-version")" = "legacy-layout" ] || \
+        fail "признак legacy-layout не был сохранён"
 
     printf '<opnsense><marker>changed</marker></opnsense>\n' > \
         "$SCENARIO_ROOT/conf/config.xml"
-    run_pre_install 1.0.1
+    run_pre_install
     assert_equal "$SCENARIO_DIR/expected-config.xml" "$migration_dir/config.xml.legacy"
 
     remove_installed_state
@@ -340,7 +315,7 @@ test_fresh_install()
     prepare_scenario fresh-install
     cp "$SCENARIO_ROOT/usr/local/etc/sing-box/config.json.sample" \
         "$SCENARIO_DIR/expected-sample.json"
-    run_pre_install ""
+    run_pre_install
     run_post_install
 
     assert_equal "$SCENARIO_DIR/expected-sample.json" \
@@ -363,7 +338,7 @@ test_migrator_failure()
 {
     prepare_scenario migrator-failure
     seed_legacy_installation YES
-    run_pre_install 1.0.1
+    run_pre_install
     remove_installed_state
 
     if run_post_install 1 0 0; then
@@ -384,7 +359,7 @@ test_service_restart_failure()
 {
     prepare_scenario service-restart-failure
     seed_legacy_installation YES
-    run_pre_install 1.0.1
+    run_pre_install
     remove_installed_state
 
     if run_post_install 0 1 0; then
@@ -400,7 +375,7 @@ test_filter_reload_failure()
 {
     prepare_scenario filter-reload-failure
     seed_legacy_installation YES
-    run_pre_install 1.0.1
+    run_pre_install
     remove_installed_state
 
     if run_post_install 0 0 1; then
@@ -417,7 +392,7 @@ test_disabled_upgrade()
 {
     prepare_scenario disabled-upgrade
     seed_legacy_installation NO
-    run_pre_install 1.0.1
+    run_pre_install
     remove_installed_state
     run_post_install
 
@@ -432,6 +407,25 @@ test_disabled_upgrade()
     assert_log_absent "configctl filter reload" "$SCENARIO_LOG"
 }
 
+test_incomplete_pre_install()
+{
+    prepare_scenario incomplete-pre-install
+    seed_legacy_installation YES
+    migration_dir="$SCENARIO_ROOT/var/db/os-sing-box"
+    mkdir -p "$migration_dir"
+    : > "$migration_dir/pre-install.started"
+
+    if run_post_install; then
+        fail "POST-INSTALL продолжил работу без подтверждённого PRE-INSTALL"
+    fi
+
+    assert_file "$migration_dir/pre-install.started"
+    assert_absent "$migration_dir/pre-install.complete"
+    assert_log_absent "service configd restart" "$SCENARIO_LOG"
+    assert_log_absent "service sing-box restart" "$SCENARIO_LOG"
+    assert_log_absent "configctl filter reload" "$SCENARIO_LOG"
+}
+
 trap cleanup EXIT HUP INT TERM
 write_mocks
 test_successful_enabled_upgrade
@@ -440,5 +434,6 @@ test_migrator_failure
 test_service_restart_failure
 test_filter_reload_failure
 test_disabled_upgrade
+test_incomplete_pre_install
 
 echo "Жизненный цикл установки и legacy-обновления пакета проверен"

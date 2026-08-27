@@ -22,14 +22,27 @@ grep -Fq 'need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runt
 
 grep -q 'RC_STATE_FILE=.*sing_box.rc.upgrade' "$PRE_INSTALL"
 grep -q 'install -o root -g wheel -m 0600 "$RC_CONF_FILE" "$RC_STATE_FILE"' "$PRE_INSTALL"
+grep -q '^legacy_layout_present()' "$PRE_INSTALL"
+grep -Fq '/usr/local/www/services_sing_box.php' "$PRE_INSTALL"
+grep -Fq '/usr/local/www/status_sing_box.php' "$PRE_INSTALL"
+grep -Fq 'PRE_INSTALL_STARTED="${MIGRATION_DIR}/pre-install.started"' "$PRE_INSTALL"
+grep -Fq 'PRE_INSTALL_COMPLETE="${MIGRATION_DIR}/pre-install.complete"' "$PRE_INSTALL"
+grep -Fq 'mv -f "$PRE_INSTALL_STARTED" "$PRE_INSTALL_COMPLETE"' "$PRE_INSTALL"
 grep -q '\[ ! -f "$LEGACY_VERSION_FILE" \]' "$PRE_INSTALL"
 grep -q '\[ -f "$SYSTEM_CONFIG" \] && \[ ! -f "$LEGACY_CONFIG_SNAPSHOT" \]' "$PRE_INSTALL"
 grep -q 'Сохранён ранее созданный исходный снимок legacy-конфигурации OPNsense' "$PRE_INSTALL"
+
+if grep -Eq '(^|[[:space:]])pkg[[:space:]]+(query|version)([[:space:]]|$)' "$PRE_INSTALL"; then
+    echo "PRE-INSTALL не должен рекурсивно запускать pkg" >&2
+    exit 1
+fi
 
 grep -q 'RC_STATE_FILE=.*sing_box.rc.upgrade' "$POST_INSTALL"
 grep -q 'install -o root -g wheel -m 0644 "$RC_STATE_FILE" "$RC_CONF_FILE"' "$POST_INSTALL"
 grep -q "echo 'sing_box_enable=\"NO\"' > \"\$RC_CONF_FILE\"" "$POST_INSTALL"
 grep -q 'SETUP_REQUIRED_FILE=.*setup-required' "$POST_INSTALL"
+grep -Fq '[ -f "$PRE_INSTALL_STARTED" ] || [ ! -f "$PRE_INSTALL_COMPLETE" ]' "$POST_INSTALL"
+grep -Fq 'PRE-INSTALL не подтвердил завершение сохранения исходного состояния' "$POST_INSTALL"
 grep -q 'fresh_configuration=0' "$POST_INSTALL"
 grep -q ': > "$SETUP_REQUIRED_FILE"' "$POST_INSTALL"
 grep -q 'Первоначальная настройка sing-box отмечена как незавершённая' "$POST_INSTALL"
