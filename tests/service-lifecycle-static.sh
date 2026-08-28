@@ -20,6 +20,9 @@ last_line_of() {
 
 grep -q '^configured_tun_interface()' "$RC_SCRIPT"
 grep -q '^process_is_sing_box()' "$RC_SCRIPT"
+grep -q '^default_route_interface()' "$RC_SCRIPT"
+grep -q '^interface_is_up()' "$RC_SCRIPT"
+grep -q '^wait_for_network_readiness()' "$RC_SCRIPT"
 grep -q '^reload_firewall()' "$RC_SCRIPT"
 grep -q '^restore_system_resolver()' "$RC_SCRIPT"
 grep -q '^wait_for_policy_readiness()' "$RC_SCRIPT"
@@ -41,6 +44,8 @@ grep -Fq 'chmod 0600 "$pidfile"' "$RC_SCRIPT"
 grep -Fq 'PID-файл указывал на другой процесс' "$RC_SCRIPT"
 grep -Fq 'Процесс sing-box уже запущен, но интерфейс $tun_interface отсутствует.' "$RC_SCRIPT"
 grep -Fq 'Процесс sing-box работает, но интерфейс $tun_interface отсутствует.' "$RC_SCRIPT"
+grep -Fq 'Сеть OPNsense не стала готова: стабильный default interface отсутствует.' "$RC_SCRIPT"
+grep -Fq 'Запуск sing-box отклонён: сеть OPNsense не стала готова.' "$RC_SCRIPT"
 grep -Fq 'Интерфейс $tun_interface не был создан за 20 секунд; запуск отменён.' "$RC_SCRIPT"
 grep -Fq 'Запуск sing-box отменён: управляемые правила firewall не активированы.' "$RC_SCRIPT"
 grep -Fq 'Управляемые правила firewall не активированы: DNS listener не готов.' "$RC_SCRIPT"
@@ -57,6 +62,13 @@ log_line="$(first_line_of 'if ! ensure_log_path; then')"
 [ -n "$setup_line" ]
 [ -n "$log_line" ]
 [ "$setup_line" -lt "$log_line" ]
+
+network_wait_line="$(first_line_of 'if ! wait_for_network_readiness; then')"
+config_check_line="$(first_line_of 'if ! "$command" check -c "$config" >> "$logfile" 2>&1; then')"
+process_start_line="$(first_line_of 'nohup "$command" run -c "$config" >> "$logfile" 2>&1 &')"
+[ -n "$network_wait_line" ]
+[ "$network_wait_line" -lt "$config_check_line" ]
+[ "$config_check_line" -lt "$process_start_line" ]
 
 interface_timeout_line="$(first_line_of 'Интерфейс $tun_interface не был создан за 20 секунд; запуск отменён.')"
 resolver_start_line="$(last_line_of 'if ! restore_system_resolver; then')"

@@ -89,6 +89,63 @@ wait_for_exit() {
     return 1
 }
 
+default_route_interface() {
+    route -n get default 2>/dev/null | awk '$1 == "interface:" { print $2; exit }'
+}
+
+interface_is_up() {
+    candidate="$1"
+    case "$candidate" in
+        ''|*[!A-Za-z0-9_.-]*)
+            return 1
+            ;;
+    esac
+
+    ifconfig "$candidate" 2>/dev/null | grep -Eq 'flags=[0-9]+<UP([,>])'
+}
+
+wait_for_network_readiness() {
+    attempts="${network_readiness_attempts:-45}"
+    stable_required="${network_readiness_stable_samples:-2}"
+
+    case "$attempts" in
+        ''|*[!0-9]*|0) attempts=45 ;;
+    esac
+    case "$stable_required" in
+        ''|*[!0-9]*|0) stable_required=2 ;;
+    esac
+
+    stable_samples=0
+    last_interface=""
+
+    while [ "$attempts" -gt 0 ]; do
+        current_interface="$(default_route_interface || true)"
+        if [ -n "$current_interface" ] && interface_is_up "$current_interface"; then
+            if [ "$current_interface" = "$last_interface" ]; then
+                stable_samples=$((stable_samples + 1))
+            else
+                last_interface="$current_interface"
+                stable_samples=1
+            fi
+
+            if [ "$stable_samples" -ge "$stable_required" ]; then
+                echo "Сеть OPNsense готова: default interface $current_interface."
+                return 0
+            fi
+        else
+            stable_samples=0
+            last_interface=""
+        fi
+
+        attempts=$((attempts - 1))
+        [ "$attempts" -gt 0 ] || break
+        sleep 1
+    done
+
+    echo "Сеть OPNsense не стала готова: стабильный default interface отсутствует."
+    return 1
+}
+
 ensure_log_path() {
     install -d -o root -g wheel -m 750 "$logdir" || return 1
     touch "$logfile" || return 1
@@ -306,6 +363,11 @@ sing_box_start() {
 
     if [ ! -x "$command" ] || [ ! -f "$config" ]; then
         echo "Исполняемый файл sing-box или рабочая конфигурация отсутствуют."
+        return 1
+    fi
+
+    if ! wait_for_network_readiness; then
+        echo "Запуск sing-box отклонён: сеть OPNsense не стала готова."
         return 1
     fi
 

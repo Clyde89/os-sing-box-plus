@@ -53,8 +53,52 @@ case "${READY_RESULT:-success}" in
 esac
 EOF
 
-chmod 0755 "$MOCK_BIN/php" "$MOCK_BIN/policy-readiness"
+cat > "$MOCK_BIN/route" <<'EOF'
+#!/bin/sh
+count=0
+if [ -f "$NETWORK_COUNT_FILE" ]; then
+    count="$(cat "$NETWORK_COUNT_FILE")"
+fi
+count=$((count + 1))
+printf '%s\n' "$count" > "$NETWORK_COUNT_FILE"
+
+if [ "$count" -lt "${NETWORK_READY_AFTER:-1}" ]; then
+    exit 1
+fi
+
+case "${NETWORK_ROUTE_MODE:-stable}" in
+    switch)
+        if [ "$count" -eq "${NETWORK_READY_AFTER:-1}" ]; then
+            interface="igc0"
+        else
+            interface="igc1"
+        fi
+        ;;
+    *)
+        interface="igc1"
+        ;;
+esac
+
+printf '  interface: %s\n' "$interface"
+EOF
+
+cat > "$MOCK_BIN/ifconfig" <<'EOF'
+#!/bin/sh
+case "${NETWORK_INTERFACE_MODE:-up}" in
+    up)
+        printf '%s: flags=1008943<UP,BROADCAST,RUNNING>\n' "$1"
+        ;;
+    *)
+        printf '%s: flags=1008942<BROADCAST,RUNNING>\n' "$1"
+        ;;
+esac
+EOF
+
+chmod 0755 "$MOCK_BIN/php" "$MOCK_BIN/policy-readiness" "$MOCK_BIN/route" "$MOCK_BIN/ifconfig"
 sed "s#^\. /etc/rc.subr\$#. \"$RC_SUBR\"#" "$RC_SCRIPT" > "$RC_COPY"
+
+PATH="$MOCK_BIN:$PATH"
+export PATH
 
 set -- noop
 # shellcheck disable=SC1090
@@ -93,6 +137,14 @@ assertCalls()
     [ "$actual" = "$expected" ] || failReadinessLifecycle "Ожидалось вызовов readiness: $expected, получено: $actual"
 }
 
+assertNetworkCalls()
+{
+    expected="$1"
+    actual=0
+    [ ! -f "$NETWORK_COUNT_FILE" ] || actual="$(cat "$NETWORK_COUNT_FILE")"
+    [ "$actual" = "$expected" ] || failReadinessLifecycle "Ожидалось сетевых проверок: $expected, получено: $actual"
+}
+
 prepareScenario()
 {
     scenario="$1"
@@ -105,6 +157,55 @@ prepareScenario()
     READY_RESULT=success
     export READY_AFTER READY_RESULT
 }
+
+prepareNetworkScenario()
+{
+    scenario="$1"
+    NETWORK_COUNT_FILE="$TEST_ROOT/network-$scenario.count"
+    rm -f "$NETWORK_COUNT_FILE"
+    network_readiness_attempts=5
+    network_readiness_stable_samples=2
+    NETWORK_READY_AFTER=1
+    NETWORK_ROUTE_MODE=stable
+    NETWORK_INTERFACE_MODE=up
+    export NETWORK_COUNT_FILE NETWORK_READY_AFTER NETWORK_ROUTE_MODE NETWORK_INTERFACE_MODE
+}
+
+prepareNetworkScenario immediate
+wait_for_network_readiness >/dev/null
+assertNetworkCalls 2
+
+prepareNetworkScenario delayed
+NETWORK_READY_AFTER=3
+export NETWORK_READY_AFTER
+wait_for_network_readiness >/dev/null
+assertNetworkCalls 4
+
+prepareNetworkScenario switched
+NETWORK_ROUTE_MODE=switch
+export NETWORK_ROUTE_MODE
+wait_for_network_readiness >/dev/null
+assertNetworkCalls 3
+
+prepareNetworkScenario timeout
+NETWORK_READY_AFTER=10
+network_readiness_attempts=3
+export NETWORK_READY_AFTER
+if wait_for_network_readiness > "$TEST_ROOT/network-timeout.output"; then
+    failReadinessLifecycle 'Отсутствующий default route не заблокировал запуск.'
+fi
+assertNetworkCalls 3
+grep -Fq 'стабильный default interface отсутствует' "$TEST_ROOT/network-timeout.output"
+
+prepareNetworkScenario interface_down
+NETWORK_INTERFACE_MODE=down
+network_readiness_attempts=2
+export NETWORK_INTERFACE_MODE
+if wait_for_network_readiness > "$TEST_ROOT/network-interface.output"; then
+    failReadinessLifecycle 'Неподнятый default interface не заблокировал запуск.'
+fi
+assertNetworkCalls 2
+grep -Fq 'стабильный default interface отсутствует' "$TEST_ROOT/network-interface.output"
 
 prepareScenario unmanaged
 rm -f "$managed_policy"
@@ -151,4 +252,4 @@ fi
 assertCalls 1
 grep -Fq 'Процесс sing-box завершился' "$TEST_ROOT/process.output"
 
-echo "Ожидание readiness DNS listener и fail-closed блокировка проверены"
+echo "Ожидание сети, readiness DNS listener и fail-closed блокировка проверены"
