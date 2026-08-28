@@ -327,15 +327,15 @@ else
     fail "системный resolver зависел от TUN sing-box"
 fi
 
-PREFLIGHT_OUTPUT="$(configctl sing-box preflight 2>&1 || true)"
-if printf '%s\n' "$PREFLIGHT_OUTPUT" | grep -Fq '"ready":true' \
-    && printf '%s\n' "$PREFLIGHT_OUTPUT" | grep -Eq '(^|[[:space:]])OK([[:space:]]|$)'; then
-    pass "сетевой preflight OPNsense был успешным"
-else
-    fail "сетевой preflight OPNsense завершился ошибкой"
-fi
-
 if [ -f "$MANAGED_POLICY" ]; then
+    PREFLIGHT_OUTPUT="$(configctl sing-box preflight 2>&1 || true)"
+    if printf '%s\n' "$PREFLIGHT_OUTPUT" | grep -Fq '"ready":true' \
+        && printf '%s\n' "$PREFLIGHT_OUTPUT" | grep -Eq '(^|[[:space:]])OK([[:space:]]|$)'; then
+        pass "сетевой preflight OPNsense был успешным"
+    else
+        fail "сетевой preflight OPNsense завершился ошибкой"
+    fi
+
     pass "managed policy был включён"
     check_mode "$STATE_DIR" 700 "каталог runtime-состояния"
     check_mode "$MANAGED_POLICY" 600 "признак managed policy"
@@ -358,7 +358,7 @@ if [ -f "$MANAGED_POLICY" ]; then
 elif [ "$REQUIRE_MANAGED" -eq 1 ]; then
     fail "обязательный managed policy не был включён"
 else
-    warn "managed policy отсутствовал; policy-специфичные проверки были пропущены"
+    warn "managed policy отсутствовал; structured preflight и policy-специфичные проверки были пропущены"
 fi
 
 if [ "$NETWORK_CHECK" -eq 1 ]; then
