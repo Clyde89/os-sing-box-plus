@@ -1,0 +1,17 @@
+PKG_NAME?=	os-sing-box
+VERSION?=	1.1.0
+ABI?=		universal
+
+.PHONY: package install clean opnsense-regression
+
+package:
+	ABI="$(ABI)" PKG_NAME="$(PKG_NAME)" VERSION="$(VERSION)" ./build.sh
+
+install: package
+	pkg add -f "dist/$(PKG_NAME).pkg"
+
+clean:
+	rm -rf work/freebsd-pkg
+
+opnsense-regression:
+	./tests/opnsense-regression.sh

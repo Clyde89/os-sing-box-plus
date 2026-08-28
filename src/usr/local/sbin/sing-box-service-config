@@ -1,0 +1,58 @@
+#!/bin/sh
+set -eu
+
+RC_CONF_FILE="${SING_BOX_RC_CONF_FILE:-/etc/rc.conf.d/sing_box}"
+RC_CONF_DIR="$(dirname "$RC_CONF_FILE")"
+SETUP_REQUIRED_FILE="${SING_BOX_SETUP_REQUIRED_FILE:-/var/db/os-sing-box/setup-required}"
+
+usage()
+{
+    echo "Использование: $0 {enable|disable|status}" >&2
+    exit 64
+}
+
+write_state()
+{
+    value="$1"
+    if [ ! -d "$RC_CONF_DIR" ]; then
+        install -d -o root -g wheel -m 0755 "$RC_CONF_DIR"
+    fi
+    temporary="$(mktemp "${RC_CONF_FILE}.XXXXXX")"
+    trap 'rm -f "$temporary"' EXIT HUP INT TERM
+    printf 'sing_box_enable="%s"\n' "$value" > "$temporary"
+    chmod 0644 "$temporary"
+    mv -f "$temporary" "$RC_CONF_FILE"
+    trap - EXIT HUP INT TERM
+}
+
+current_state()
+{
+    if [ -r "$RC_CONF_FILE" ] && grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE"; then
+        echo "YES"
+    else
+        echo "NO"
+    fi
+}
+
+[ "$#" -eq 1 ] || usage
+
+case "$1" in
+    enable)
+        if [ -f "$SETUP_REQUIRED_FILE" ]; then
+            echo "Автозапуск sing-box не включён: первоначальная настройка не завершена." >&2
+            exit 65
+        fi
+        write_state "YES"
+        echo "Автозапуск sing-box включён."
+        ;;
+    disable)
+        write_state "NO"
+        echo "Автозапуск sing-box отключён."
+        ;;
+    status)
+        current_state
+        ;;
+    *)
+        usage
+        ;;
+esac

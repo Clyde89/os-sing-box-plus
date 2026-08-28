@@ -1,0 +1,58 @@
+#!/bin/sh
+set -eu
+
+CONFIG_FILE="/usr/local/etc/sing-box/config.json"
+RC_CONF_FILE="/etc/rc.conf.d/sing_box"
+SYSTEM_CONFIG="/conf/config.xml"
+MIGRATION_DIR="/var/db/os-sing-box"
+MIGRATION_FILE="${MIGRATION_DIR}/config.json.upgrade"
+RC_STATE_FILE="${MIGRATION_DIR}/sing_box.rc.upgrade"
+LEGACY_CONFIG_SNAPSHOT="${MIGRATION_DIR}/config.xml.legacy"
+LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
+PRE_INSTALL_STARTED="${MIGRATION_DIR}/pre-install.started"
+PRE_INSTALL_COMPLETE="${MIGRATION_DIR}/pre-install.complete"
+
+prepare_migration_dir()
+{
+    install -d -o root -g wheel -m 0700 "$MIGRATION_DIR"
+}
+
+legacy_layout_present()
+{
+    [ -e /usr/local/www/services_sing_box.php ] \
+        || [ -e /usr/local/www/status_sing_box.php ] \
+        || [ -e /usr/local/opnsense/mvc/app/models/OPNsense/sing-box ]
+}
+
+prepare_migration_dir
+rm -f "$PRE_INSTALL_COMPLETE"
+: > "$PRE_INSTALL_STARTED"
+chmod 0600 "$PRE_INSTALL_STARTED"
+
+if [ -f "$CONFIG_FILE" ]; then
+    echo "===> Сохраняется пользовательская конфигурация sing-box перед установкой"
+    install -o root -g wheel -m 0600 "$CONFIG_FILE" "$MIGRATION_FILE"
+fi
+
+if [ -f "$RC_CONF_FILE" ]; then
+    echo "===> Сохраняется состояние автозапуска sing-box перед установкой"
+    install -o root -g wheel -m 0600 "$RC_CONF_FILE" "$RC_STATE_FILE"
+fi
+
+if legacy_layout_present; then
+    echo "===> Сохраняется состояние OPNsense для миграции legacy-пакета os-sing-box"
+
+    if [ ! -f "$LEGACY_VERSION_FILE" ]; then
+        printf '%s\n' 'legacy-layout' > "$LEGACY_VERSION_FILE"
+        chmod 0600 "$LEGACY_VERSION_FILE"
+    fi
+
+    if [ -f "$SYSTEM_CONFIG" ] && [ ! -f "$LEGACY_CONFIG_SNAPSHOT" ]; then
+        install -o root -g wheel -m 0600 "$SYSTEM_CONFIG" "$LEGACY_CONFIG_SNAPSHOT"
+    elif [ -f "$LEGACY_CONFIG_SNAPSHOT" ]; then
+        echo "===> Сохранён ранее созданный исходный снимок legacy-конфигурации OPNsense"
+    fi
+fi
+
+mv -f "$PRE_INSTALL_STARTED" "$PRE_INSTALL_COMPLETE"
+chmod 0600 "$PRE_INSTALL_COMPLETE"

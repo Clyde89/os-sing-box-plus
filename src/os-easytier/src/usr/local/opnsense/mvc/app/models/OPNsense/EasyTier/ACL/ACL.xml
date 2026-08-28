@@ -1,8 +1,0 @@
-<acl>
-  <page-vpn-easytier>
-    <name>VPN: EasyTier</name>
-    <patterns>
-      <pattern>easytier.php*</pattern>
-    </patterns>
-  </page-vpn-easytier>
-</acl>

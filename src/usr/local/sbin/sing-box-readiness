@@ -1,0 +1,289 @@
+#!/bin/sh
+set -u
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+TAG="sing-box-readiness"
+CONFIG_FILE="${SING_BOX_READINESS_CONFIG_FILE:-/usr/local/etc/sing-box/readiness.conf}"
+RC_CONF_FILE="${SING_BOX_READINESS_RC_CONF_FILE:-/etc/rc.conf.d/sing_box}"
+LOCK_DIR="${SING_BOX_READINESS_LOCK_DIR:-/var/run/sing-box-readiness.lock}"
+LOCK_PID_FILE="${LOCK_DIR}/pid"
+EVENT="manual"
+EVENT_INTERFACES=""
+DNS_OK=0
+E2E_OK=0
+
+log_msg()
+{
+    /usr/bin/logger -t "$TAG" "$*"
+    echo "$TAG: $*"
+}
+
+cleanup()
+{
+    if [ -f "$LOCK_PID_FILE" ]; then
+        lock_pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+        if [ "$lock_pid" = "$$" ]; then
+            rm -f "$LOCK_PID_FILE"
+            rmdir "$LOCK_DIR" 2>/dev/null || true
+        fi
+    fi
+}
+
+acquire_lock()
+{
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+        chmod 0700 "$LOCK_DIR" 2>/dev/null || true
+        printf '%s\n' "$$" > "$LOCK_PID_FILE"
+        chmod 0600 "$LOCK_PID_FILE" 2>/dev/null || true
+        return 0
+    fi
+
+    lock_pid="$(cat "$LOCK_PID_FILE" 2>/dev/null || true)"
+    case "$lock_pid" in
+        ''|*[!0-9]*)
+            ;;
+        *)
+            if kill -0 "$lock_pid" 2>/dev/null; then
+                log_msg "другая проверка готовности уже выполняется, PID $lock_pid"
+                return 1
+            fi
+            ;;
+    esac
+
+    rm -f "$LOCK_PID_FILE"
+    if ! rmdir "$LOCK_DIR" 2>/dev/null; then
+        log_msg "не удалось очистить устаревшую блокировку готовности"
+        return 1
+    fi
+
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        log_msg "не удалось получить блокировку готовности после очистки устаревшего состояния"
+        return 1
+    fi
+
+    chmod 0700 "$LOCK_DIR" 2>/dev/null || true
+    printf '%s\n' "$$" > "$LOCK_PID_FILE"
+    chmod 0600 "$LOCK_PID_FILE" 2>/dev/null || true
+    log_msg "устаревшая блокировка готовности очищена"
+    return 0
+}
+
+service_is_enabled()
+{
+    [ -r "$RC_CONF_FILE" ] || return 1
+    /usr/bin/grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE"
+}
+
+is_enabled()
+{
+    case "${SING_BOX_READINESS_ENABLE:-NO}" in
+        YES|yes|true|TRUE|1|on|ON)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+interface_is_selected()
+{
+    [ "$EVENT" = "newwanip" ] || return 0
+    [ -n "${SING_BOX_READINESS_INTERFACES:-}" ] || return 0
+    [ -n "$EVENT_INTERFACES" ] || return 1
+
+    configured=$(printf '%s' "$SING_BOX_READINESS_INTERFACES" | tr ',' ' ')
+    changed=$(printf '%s' "$EVENT_INTERFACES" | tr ',' ' ')
+
+    for current in $changed; do
+        for allowed in $configured; do
+            [ "$current" = "$allowed" ] && return 0
+        done
+    done
+
+    return 1
+}
+
+validate_config()
+{
+    missing=""
+    for variable in \
+        SING_BOX_READINESS_SOURCE_IP \
+        SING_BOX_READINESS_UNDERLAY_IP \
+        SING_BOX_READINESS_UNDERLAY_PORT \
+        SING_BOX_READINESS_DNS_LISTEN_IP \
+        SING_BOX_READINESS_DNS_LISTEN_PORT \
+        SING_BOX_READINESS_POLICY_SUFFIX \
+        SING_BOX_READINESS_E2E_NAME \
+        SING_BOX_READINESS_E2E_PORT
+    do
+        eval "value=\${$variable:-}"
+        if [ -z "$value" ]; then
+            missing="$missing $variable"
+        fi
+    done
+
+    if [ -n "$missing" ]; then
+        log_msg "не заданы обязательные параметры:$missing"
+        return 1
+    fi
+
+    for command_path in /usr/bin/nc /usr/bin/drill /bin/timeout /usr/local/bin/curl /usr/sbin/service; do
+        if [ ! -x "$command_path" ]; then
+            log_msg "отсутствует обязательная команда: $command_path"
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+wait_underlay()
+{
+    count=0
+    attempts="${SING_BOX_READINESS_UNDERLAY_ATTEMPTS:-30}"
+    while [ "$count" -lt "$attempts" ]; do
+        if /usr/bin/nc -s "$SING_BOX_READINESS_SOURCE_IP" -z -w 1 "$SING_BOX_READINESS_UNDERLAY_IP" "$SING_BOX_READINESS_UNDERLAY_PORT" >/dev/null 2>&1; then
+            return 0
+        fi
+        count=$((count + 1))
+        sleep 1
+    done
+    return 1
+}
+
+wait_listener()
+{
+    count=0
+    attempts="${SING_BOX_READINESS_LISTENER_ATTEMPTS:-15}"
+    while [ "$count" -lt "$attempts" ]; do
+        if /usr/bin/nc -z -w 1 "$SING_BOX_READINESS_DNS_LISTEN_IP" "$SING_BOX_READINESS_DNS_LISTEN_PORT" >/dev/null 2>&1; then
+            return 0
+        fi
+        count=$((count + 1))
+        sleep 1
+    done
+    return 1
+}
+
+probe_policy_dns()
+{
+    probe_name="readiness-$(date +%s)-$$.${SING_BOX_READINESS_POLICY_SUFFIX}"
+    output=$(/bin/timeout 6 /usr/bin/drill -p "$SING_BOX_READINESS_DNS_LISTEN_PORT" "$probe_name" @"$SING_BOX_READINESS_DNS_LISTEN_IP" HTTPS 2>&1)
+    printf '%s\n' "$output" | /usr/bin/grep -Eq 'rcode: (NOERROR|NXDOMAIN)'
+}
+
+probe_e2e()
+{
+    output=$(/bin/timeout 4 /usr/bin/drill -p "$SING_BOX_READINESS_DNS_LISTEN_PORT" "$SING_BOX_READINESS_E2E_NAME" @"$SING_BOX_READINESS_DNS_LISTEN_IP" A 2>&1)
+    fake_ip=$(printf '%s\n' "$output" | /usr/bin/grep -Eo '198[.](18|19)[.][0-9]+[.][0-9]+' | /usr/bin/head -n 1)
+
+    [ -n "$fake_ip" ] || return 1
+
+    /usr/local/bin/curl \
+        -4 \
+        -sS \
+        --noproxy '*' \
+        --connect-timeout 3 \
+        --max-time 6 \
+        --resolve "${SING_BOX_READINESS_E2E_NAME}:${SING_BOX_READINESS_E2E_PORT}:${fake_ip}" \
+        -o /dev/null \
+        "https://${SING_BOX_READINESS_E2E_NAME}:${SING_BOX_READINESS_E2E_PORT}/" \
+        >/dev/null 2>&1
+}
+
+check_path()
+{
+    DNS_OK=0
+    E2E_OK=0
+
+    if probe_policy_dns; then
+        DNS_OK=1
+    fi
+
+    if probe_e2e; then
+        E2E_OK=1
+    fi
+
+    [ "$DNS_OK" -eq 1 ] && [ "$E2E_OK" -eq 1 ]
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --event)
+            [ "$#" -ge 2 ] || exit 0
+            EVENT="$2"
+            shift 2
+            ;;
+        --interfaces)
+            [ "$#" -ge 2 ] || exit 0
+            EVENT_INTERFACES="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+service_is_enabled || exit 0
+[ -r "$CONFIG_FILE" ] || exit 0
+# shellcheck disable=SC1090
+. "$CONFIG_FILE"
+
+is_enabled || exit 0
+interface_is_selected || exit 0
+validate_config || exit 0
+
+if ! acquire_lock; then
+    exit 0
+fi
+trap cleanup EXIT HUP INT TERM
+
+if [ "$EVENT" = "newwanip" ]; then
+    sleep "${SING_BOX_READINESS_NEWWAN_DELAY:-3}"
+fi
+
+log_msg "проверяется готовность policy-маршрута после события $EVENT"
+
+if wait_underlay; then
+    log_msg "underlay готов"
+else
+    log_msg "underlay не стал доступен; восстановительный перезапуск пропущен"
+    exit 0
+fi
+
+if /usr/sbin/service sing-box status >/dev/null 2>&1; then
+    :
+else
+    log_msg "служба sing-box не запущена; выполняется запуск"
+    /usr/sbin/service sing-box start >/dev/null 2>&1 || true
+fi
+
+if ! wait_listener; then
+    log_msg "DNS-listener sing-box не стал доступен"
+fi
+
+if check_path; then
+    log_msg "policy DNS и E2E VPN-поток работают; перезапуск не требуется"
+    exit 0
+fi
+
+log_msg "policy-маршрут неработоспособен при доступном underlay; dns=$DNS_OK e2e=$E2E_OK; выполняется один восстановительный перезапуск"
+/usr/sbin/service sing-box restart >/dev/null 2>&1 || true
+
+if ! wait_listener; then
+    log_msg "DNS-listener не восстановился после перезапуска"
+    exit 0
+fi
+
+if ! wait_underlay; then
+    log_msg "underlay стал недоступен после перезапуска"
+    exit 0
+fi
+
+if check_path; then
+    log_msg "восстановление завершено успешно; policy DNS и E2E VPN-поток работают"
+else
+    log_msg "восстановление не выполнено; dns=$DNS_OK e2e=$E2E_OK"
+fi
+
+exit 0

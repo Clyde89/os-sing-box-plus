@@ -1,0 +1,139 @@
+#!/bin/sh
+set -eu
+
+SING_BOX_DIR="/usr/local/etc/sing-box"
+SING_BOX_CONFIG="${SING_BOX_DIR}/config.json"
+SING_BOX_SAMPLE="${SING_BOX_DIR}/config.json.sample"
+READINESS_CONFIG="${SING_BOX_DIR}/readiness.conf"
+READINESS_SAMPLE="${SING_BOX_DIR}/readiness.conf.sample"
+SING_BOX_LOG_DIR="/var/log/sing-box"
+SING_BOX_LOG="${SING_BOX_LOG_DIR}/sing-box.log"
+RC_CONF_FILE="/etc/rc.conf.d/sing_box"
+MIGRATION_DIR="/var/db/os-sing-box"
+MIGRATION_FILE="${MIGRATION_DIR}/config.json.upgrade"
+RC_STATE_FILE="${MIGRATION_DIR}/sing_box.rc.upgrade"
+LEGACY_CONFIG_SNAPSHOT="${MIGRATION_DIR}/config.xml.legacy"
+LEGACY_VERSION_FILE="${MIGRATION_DIR}/legacy-version"
+PENDING_FILTER_RELOAD="${MIGRATION_DIR}/filter-reload.pending"
+SETUP_REQUIRED_FILE="${MIGRATION_DIR}/setup-required"
+PRE_INSTALL_STARTED="${MIGRATION_DIR}/pre-install.started"
+PRE_INSTALL_COMPLETE="${MIGRATION_DIR}/pre-install.complete"
+LEGACY_MIGRATOR="/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php"
+legacy_migration_processed=0
+legacy_migration_failed=0
+fresh_configuration=0
+
+echo "===> Настраивается os-sing-box"
+
+if [ -f "$PRE_INSTALL_STARTED" ] || [ ! -f "$PRE_INSTALL_COMPLETE" ]; then
+    echo "Ошибка: PRE-INSTALL не подтвердил завершение сохранения исходного состояния" >&2
+    exit 1
+fi
+
+mkdir -p /etc/rc.conf.d
+if [ -f "$RC_STATE_FILE" ]; then
+    echo "===> Восстанавливается состояние автозапуска sing-box после обновления"
+    install -o root -g wheel -m 0644 "$RC_STATE_FILE" "$RC_CONF_FILE"
+elif [ ! -f "$RC_CONF_FILE" ]; then
+    echo 'sing_box_enable="NO"' > "$RC_CONF_FILE"
+    chmod 0644 "$RC_CONF_FILE"
+    echo "===> Автозапуск sing-box оставлен отключённым до завершения настройки"
+fi
+
+install -d -o root -g wheel -m 0750 "$SING_BOX_LOG_DIR"
+touch "$SING_BOX_LOG"
+chown root:wheel "$SING_BOX_LOG"
+chmod 0640 "$SING_BOX_LOG"
+
+if [ ! -f "$MIGRATION_FILE" ] && [ ! -f "$SING_BOX_CONFIG" ]; then
+    fresh_configuration=1
+fi
+
+if [ -f "$MIGRATION_FILE" ]; then
+    echo "===> Восстанавливается пользовательская конфигурация sing-box после обновления"
+    install -d -o root -g wheel -m 0700 "$SING_BOX_DIR"
+    install -o root -g wheel -m 0600 "$MIGRATION_FILE" "$SING_BOX_CONFIG"
+    if ! cmp -s "$MIGRATION_FILE" "$SING_BOX_CONFIG"; then
+        echo "Ошибка: восстановленная конфигурация sing-box не совпала с сохранённой копией" >&2
+        exit 1
+    fi
+elif [ ! -f "$SING_BOX_CONFIG" ] && [ -f "$SING_BOX_SAMPLE" ]; then
+    install -o root -g wheel -m 0600 "$SING_BOX_SAMPLE" "$SING_BOX_CONFIG"
+elif [ -f "$SING_BOX_CONFIG" ]; then
+    chmod 0600 "$SING_BOX_CONFIG"
+fi
+
+if [ "$fresh_configuration" -eq 1 ]; then
+    install -d -o root -g wheel -m 0700 "$MIGRATION_DIR"
+    : > "$SETUP_REQUIRED_FILE"
+    chmod 0600 "$SETUP_REQUIRED_FILE"
+    echo "===> Первоначальная настройка sing-box отмечена как незавершённая"
+fi
+
+if [ -f "$RC_STATE_FILE" ] && ! cmp -s "$RC_STATE_FILE" "$RC_CONF_FILE"; then
+    echo "Ошибка: состояние автозапуска sing-box не совпало с сохранённой копией" >&2
+    exit 1
+fi
+
+if [ ! -f "$READINESS_CONFIG" ] && [ -f "$READINESS_SAMPLE" ]; then
+    install -o root -g wheel -m 0600 "$READINESS_SAMPLE" "$READINESS_CONFIG"
+fi
+
+if [ -f "$LEGACY_VERSION_FILE" ] && [ -f "$LEGACY_CONFIG_SNAPSHOT" ]; then
+    legacy_version="$(cat "$LEGACY_VERSION_FILE" 2>/dev/null || true)"
+    echo "===> Восстанавливаются объекты OPNsense после обновления legacy-пакета ${legacy_version:-неизвестной версии}"
+    if [ -r "$LEGACY_MIGRATOR" ] && /usr/local/bin/php "$LEGACY_MIGRATOR" "$LEGACY_CONFIG_SNAPSHOT"; then
+        legacy_migration_processed=1
+    else
+        legacy_migration_failed=1
+        echo "Ошибка: не удалось восстановить объекты OPNsense из legacy-конфигурации; снимок сохранён в $LEGACY_CONFIG_SNAPSHOT" >&2
+    fi
+fi
+
+rm -f /usr/local/www/services_sing_box.php /usr/local/www/status_sing_box.php
+rm -f /var/lib/php/tmp/opnsense_menu_cache.xml /var/lib/php/tmp/opnsense_acl_cache.json
+rm -rf /usr/local/opnsense/mvc/app/models/OPNsense/sing-box
+
+service configd restart >/dev/null 2>&1 || true
+
+if [ "$legacy_migration_failed" -eq 0 ] && grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE" 2>/dev/null; then
+    if ! service sing-box restart >/dev/null 2>&1; then
+        if [ "$legacy_migration_processed" -eq 1 ]; then
+            legacy_migration_failed=1
+            echo "Ошибка: sing-box не запустился после legacy-миграции; миграционные данные сохранены" >&2
+        else
+            echo "Предупреждение: sing-box не запустился после установки пакета" >&2
+        fi
+    fi
+fi
+
+if [ "$legacy_migration_processed" -eq 1 ] && [ "$legacy_migration_failed" -eq 0 ]; then
+    if grep -Eq '^[[:space:]]*sing_box_enable[[:space:]]*=[[:space:]]*"YES"[[:space:]]*$' "$RC_CONF_FILE" 2>/dev/null; then
+        if configctl filter reload >/dev/null 2>&1; then
+            rm -f "$PENDING_FILTER_RELOAD"
+        else
+            legacy_migration_failed=1
+            echo "Ошибка: не удалось применить восстановленные правила firewall; миграционные данные сохранены" >&2
+        fi
+    else
+        install -d -o root -g wheel -m 0700 "$MIGRATION_DIR"
+        : > "$PENDING_FILTER_RELOAD"
+        chmod 0600 "$PENDING_FILTER_RELOAD"
+        echo "===> Применение восстановленных правил firewall отложено до запуска sing-box"
+    fi
+fi
+
+if [ "$legacy_migration_failed" -ne 0 ]; then
+    exit 1
+fi
+
+rm -f \
+    "$MIGRATION_FILE" \
+    "$RC_STATE_FILE" \
+    "$LEGACY_CONFIG_SNAPSHOT" \
+    "$LEGACY_VERSION_FILE" \
+    "$PRE_INSTALL_STARTED" \
+    "$PRE_INSTALL_COMPLETE"
+rmdir "$MIGRATION_DIR" 2>/dev/null || true
+
+exit 0

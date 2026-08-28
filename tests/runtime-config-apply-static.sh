@@ -1,0 +1,82 @@
+#!/bin/sh
+set -eu
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+SCRIPT="$ROOT_DIR/src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php"
+ACTIONS="$ROOT_DIR/src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf"
+CONTROLLER="$ROOT_DIR/src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php"
+
+[ -f "$SCRIPT" ]
+[ -f "$ACTIONS" ]
+[ -f "$CONTROLLER" ]
+
+grep -q 'RuntimeConfigBuilder::build' "$SCRIPT"
+grep -Fq "(\$plan['apply_ready'] ?? false) !== true" "$SCRIPT"
+grep -q "check -c" "$SCRIPT"
+grep -q "tempnam" "$SCRIPT"
+grep -Fq "chmod(\$tempFile, 0600)" "$SCRIPT"
+grep -Fq "copy(TARGET_CONFIG, \$backupFile)" "$SCRIPT"
+grep -Fq "chmod(\$backupFile, 0600)" "$SCRIPT"
+grep -Fq "rename(\$tempFile, TARGET_CONFIG)" "$SCRIPT"
+grep -Fq "chmod(TARGET_CONFIG, 0600)" "$SCRIPT"
+grep -q 'restorePreviousConfig' "$SCRIPT"
+grep -q 'acquireApplyLock' "$SCRIPT"
+grep -Fq 'flock($handle, LOCK_EX | LOCK_NB)' "$SCRIPT"
+grep -q 'SETUP_REQUIRED_FILE' "$SCRIPT"
+grep -q 'MANAGED_CONFIG_FILE' "$SCRIPT"
+grep -q 'ADOPTION_APPROVAL_FILE' "$SCRIPT"
+grep -q 'UNMANAGED_ORIGINAL_FILE' "$SCRIPT"
+grep -q 'MANAGED_POLICY_FILE' "$SCRIPT"
+grep -q 'POLICY_PLAN_FILE' "$SCRIPT"
+grep -q 'POLICY_RELOAD_PENDING_FILE' "$SCRIPT"
+grep -q 'TUN_INTERFACE_FILE' "$SCRIPT"
+grep -q 'existing user' "$SCRIPT" || grep -q 'существующая пользовательская конфигурация' "$SCRIPT"
+grep -q 'ensureManagedState' "$SCRIPT"
+grep -q '^function approveManagedAdoption' "$SCRIPT"
+grep -q '^function adoptionApprovalMatchesCurrentConfig' "$SCRIPT"
+grep -Fq 'writeStateFile(MANAGED_CONFIG_FILE, "managed\n")' "$SCRIPT"
+grep -q 'PolicyPlanValidator::assertValid' "$SCRIPT"
+grep -q 'NetworkPreflightValidator::validateEnvironment' "$SCRIPT"
+grep -q '^function collectNetworkEnvironment' "$SCRIPT"
+grep -q '^function networkPreflight' "$SCRIPT"
+grep -Fq "(\$preflight['ready'] ?? false) !== true" "$SCRIPT"
+grep -q '^function capturePolicyState' "$SCRIPT"
+grep -q '^function restorePolicyState' "$SCRIPT"
+grep -q '^function applyPolicyState' "$SCRIPT"
+grep -q '^function serviceWasRunning' "$SCRIPT"
+grep -q '^function restartService' "$SCRIPT"
+grep -q '^function assertPolicyActivation' "$SCRIPT"
+grep -q '^function rollbackAppliedRuntime' "$SCRIPT"
+grep -Fq 'writeStateFile(POLICY_PLAN_FILE, $json)' "$SCRIPT"
+grep -Fq 'writeStateFile(MANAGED_POLICY_FILE, "managed\n")' "$SCRIPT"
+grep -Fq 'writeStateFile(POLICY_RELOAD_PENDING_FILE, "pending\n")' "$SCRIPT"
+grep -Fq 'writeStateFile(TUN_INTERFACE_FILE, $tunInterface . PHP_EOL)' "$SCRIPT"
+grep -Fq 'restorePolicyState($policySnapshot)' "$SCRIPT"
+grep -Fq 'POLICY_ACTIVE_FILE => snapshotStateFile(POLICY_ACTIVE_FILE)' "$SCRIPT"
+grep -Fq 'Восстановительный перезапуск пропущен из-за неполного отката файлов.' "$SCRIPT"
+grep -Fq "(\$policyPlan['confirmation_required'] ?? false) === true" "$SCRIPT"
+grep -q '^\[apply\]$' "$ACTIONS"
+grep -q 'runtime_config.php apply' "$ACTIONS"
+grep -q '^\[preflight\]$' "$ACTIONS"
+grep -q 'runtime_config.php preflight' "$ACTIONS"
+grep -q '^\[approve-adoption\]$' "$ACTIONS"
+grep -q 'runtime_config.php approve-adoption' "$ACTIONS"
+grep -q 'function applyAction' "$CONTROLLER"
+grep -q 'function adoptAction' "$CONTROLLER"
+grep -q 'runtimeOwnership' "$CONTROLLER"
+grep -q "'management_state'" "$CONTROLLER"
+grep -q "configdRun('sing-box apply')" "$CONTROLLER"
+grep -q "configdRun('sing-box preflight')" "$CONTROLLER"
+grep -q "configdRun('sing-box approve-adoption')" "$CONTROLLER"
+
+grep -Fq "runServiceCommand('restart')" "$SCRIPT"
+grep -Fq 'assertPolicyActivation($plan)' "$SCRIPT"
+grep -Fq 'rollbackAppliedRuntime(' "$SCRIPT"
+grep -Fq 'Служба sing-box перезапущена, policy-состояние подтверждено.' "$SCRIPT"
+
+if grep -q 'file_put_contents(TARGET_CONFIG' "$SCRIPT"; then
+    echo "Runtime-конфигурация не должна записываться напрямую в целевой файл до проверки" >&2
+    exit 1
+fi
+
+echo "Транзакционное применение, перезапуск и откат runtime-конфигурации проверены"

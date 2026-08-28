@@ -1,0 +1,123 @@
+<form>
+    <field>
+        <id>settings.capture.mode</id>
+        <label>Режим перенаправления</label>
+        <type>dropdown</type>
+        <help>Безопасный режим по умолчанию обрабатывает только явно выбранных клиентов. Перенаправление всего локального трафика включается только после явного выбора.</help>
+    </field>
+    <field>
+        <id>settings.capture.interfaces</id>
+        <label>Интерфейсы локальной сети</label>
+        <type>dropdown</type>
+        <help>Выберите интерфейсы LAN/VLAN, с которых разрешён захват трафика. WAN намеренно запрещён для автоматического захвата.</help>
+    </field>
+    <field>
+        <id>settings.capture.clients</id>
+        <label>Клиенты для перенаправления</label>
+        <type>textbox</type>
+        <height>8</height>
+        <help>По одному значению на строку. Поддерживаются отдельные IPv4/IPv6-адреса, сети CIDR и диапазоны адресов вида 192.0.2.10-192.0.2.20.</help>
+    </field>
+    <field>
+        <id>settings.dns.redirectDomains</id>
+        <label>Домены и DNS-имена для перенаправления</label>
+        <type>textbox</type>
+        <height>8</height>
+        <help>По одному доменному имени на строку. Поддерживаются точные имена и шаблоны вида *.example.org. Для IDN требуется запись в формате punycode.</help>
+    </field>
+    <field>
+        <id>settings.dns.listenAddress</id>
+        <label>Адрес DNS-listener</label>
+        <type>text</type>
+        <help>Локальный адрес, на котором sing-box принимает перенаправленные DNS-запросы.</help>
+    </field>
+    <field>
+        <id>settings.dns.listenPort</id>
+        <label>Порт DNS-listener</label>
+        <type>text</type>
+        <help>Локальный порт DNS-listener sing-box.</help>
+    </field>
+    <field>
+        <id>settings.dns.fakeIpRange</id>
+        <label>Диапазон FakeIP IPv4</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Диапазон адресов, выдаваемых FakeIP для выбранных доменов. Рекомендуется оставить 198.18.0.0/15, если эта сеть не используется в локальной инфраструктуре.</help>
+    </field>
+    <field>
+        <id>settings.dns.policyUpstreamAddress</id>
+        <label>IPv4-адрес policy DNS</label>
+        <type>text</type>
+        <help>IPv4-адрес upstream DNS для выбранных доменов. Числовой адрес исключает рекурсивную DNS-зависимость bootstrap-соединения.</help>
+    </field>
+    <field>
+        <id>settings.dns.policyUpstreamType</id>
+        <label>Транспорт policy DNS</label>
+        <type>dropdown</type>
+        <advanced>true</advanced>
+        <help>Для policy-bound DNS используется отдельный DNS over HTTPS transport.</help>
+    </field>
+    <field>
+        <id>settings.dns.policyUpstreamPort</id>
+        <label>Порт policy DNS</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>TCP-порт upstream DNS over HTTPS.</help>
+    </field>
+    <field>
+        <id>settings.dns.policyUpstreamTlsServerName</id>
+        <label>TLS-имя policy DNS</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Имя для SNI и проверки сертификата. Поле можно оставить пустым, если сертификат upstream DNS содержит его IPv4-адрес.</help>
+    </field>
+    <field>
+        <id>settings.dns.policyUpstreamPath</id>
+        <label>Путь policy DNS over HTTPS</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>HTTP-путь DNS over HTTPS. Стандартное значение — /dns-query.</help>
+    </field>
+    <field>
+        <id>settings.policy.outboundMode</id>
+        <label>Режим policy outbound</label>
+        <type>dropdown</type>
+        <advanced>true</advanced>
+        <help>Определяет способ выхода трафика выбранных доменов. Поддерживается прямой outbound с привязкой к отдельному исходящему IPv4-адресу.</help>
+    </field>
+    <field>
+        <id>settings.policy.bindAddress</id>
+        <label>Исходящий IPv4-адрес policy-маршрута</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>IPv4-адрес, к которому sing-box привязывает policy outbound. Адрес должен принадлежать OPNsense и использоваться только для управляемого policy-маршрута.</help>
+    </field>
+    <field>
+        <id>settings.policy.gateway</id>
+        <label>Gateway policy-маршрута</label>
+        <type>dropdown</type>
+        <advanced>true</advanced>
+        <help>Выберите активный IPv4 gateway OPNsense, через который должен выходить source-bound policy-трафик. Если gateway позднее станет недоступен, fail-closed правило не позволит этому трафику уйти обычным маршрутом.</help>
+    </field>
+    <field>
+        <id>settings.tun.interfaceName</id>
+        <label>Имя TUN-интерфейса</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Имя виртуального интерфейса sing-box. Для большинства установок рекомендуется оставить значение по умолчанию.</help>
+    </field>
+    <field>
+        <id>settings.tun.address</id>
+        <label>Адрес TUN-интерфейса</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Локальный адрес TUN-интерфейса с префиксом сети.</help>
+    </field>
+    <field>
+        <id>settings.tun.stack</id>
+        <label>Сетевой стек TUN</label>
+        <type>dropdown</type>
+        <advanced>true</advanced>
+        <help>Для стандартной конфигурации используется системный сетевой стек.</help>
+    </field>
+</form>

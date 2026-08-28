@@ -2,3 +2,10 @@
 ._*
 .private/
 work/
+dist/
+*.pkg
+*.txz
+*.tar.gz
+*.log
+.env
+src/usr/local/bin/*.xz

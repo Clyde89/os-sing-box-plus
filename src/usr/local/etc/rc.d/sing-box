@@ -1,0 +1,500 @@
+#!/bin/sh
+
+# PROVIDE: sing_box
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+# shellcheck disable=SC1091
+. /etc/rc.subr
+
+name="sing_box"
+# shellcheck disable=SC2034
+rcvar="sing_box_enable"
+
+pidfile="/var/run/sing-box.pid"
+logdir="/var/log/sing-box"
+logfile="${logdir}/sing-box.log"
+command="/usr/local/bin/sing-box"
+config="/usr/local/etc/sing-box/config.json"
+state_dir="/var/db/os-sing-box"
+pending_filter_reload="${state_dir}/filter-reload.pending"
+setup_required="${state_dir}/setup-required"
+managed_policy="${state_dir}/managed-policy"
+policy_plan="${state_dir}/policy-plan.json"
+tun_interface_file="${state_dir}/tun-interface"
+policy_active="/var/run/sing-box-policy-active"
+policy_readiness_helper="/usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php"
+system_resolver_helper="/usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php"
+php_binary="/usr/local/bin/php"
+
+# shellcheck disable=SC2034
+start_cmd="${name}_start"
+# shellcheck disable=SC2034
+stop_cmd="${name}_stop"
+# shellcheck disable=SC2034
+status_cmd="${name}_status"
+
+load_rc_config $name
+: "${sing_box_enable:=no}"
+
+configured_tun_interface() {
+    candidate="tun_singbox"
+    if [ -r "$tun_interface_file" ]; then
+        stored="$(cat "$tun_interface_file" 2>/dev/null || true)"
+        case "$stored" in
+            ''|*[!A-Za-z0-9_.-]*) ;;
+            *) candidate="$stored" ;;
+        esac
+    fi
+    printf '%s\n' "$candidate"
+}
+
+read_pid() {
+    [ -f "$pidfile" ] || return 1
+    pid="$(cat "$pidfile" 2>/dev/null || true)"
+    case "$pid" in
+        ''|*[!0-9]*)
+            return 1
+            ;;
+    esac
+    printf '%s\n' "$pid"
+}
+
+process_is_sing_box() {
+    pid="$1"
+    kill -0 "$pid" 2>/dev/null || return 1
+
+    proc_comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+    case "$proc_comm" in
+        sing-box|*/sing-box)
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
+wait_for_exit() {
+    pid="$1"
+    timeout="${2:-10}"
+
+    while [ "$timeout" -gt 0 ]; do
+        if ! kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+        timeout=$((timeout - 1))
+    done
+
+    return 1
+}
+
+default_route_interface() {
+    route -n get default 2>/dev/null | awk '$1 == "interface:" { print $2; exit }'
+}
+
+interface_is_up() {
+    candidate="$1"
+    case "$candidate" in
+        ''|*[!A-Za-z0-9_.-]*)
+            return 1
+            ;;
+    esac
+
+    ifconfig "$candidate" 2>/dev/null | grep -Eq 'flags=[0-9]+<UP([,>])'
+}
+
+wait_for_network_readiness() {
+    attempts="${network_readiness_attempts:-45}"
+    stable_required="${network_readiness_stable_samples:-2}"
+
+    case "$attempts" in
+        ''|*[!0-9]*|0) attempts=45 ;;
+    esac
+    case "$stable_required" in
+        ''|*[!0-9]*|0) stable_required=2 ;;
+    esac
+
+    stable_samples=0
+    last_interface=""
+
+    while [ "$attempts" -gt 0 ]; do
+        current_interface="$(default_route_interface || true)"
+        if [ -n "$current_interface" ] && interface_is_up "$current_interface"; then
+            if [ "$current_interface" = "$last_interface" ]; then
+                stable_samples=$((stable_samples + 1))
+            else
+                last_interface="$current_interface"
+                stable_samples=1
+            fi
+
+            if [ "$stable_samples" -ge "$stable_required" ]; then
+                echo "Сеть OPNsense готова: default interface $current_interface."
+                return 0
+            fi
+        else
+            stable_samples=0
+            last_interface=""
+        fi
+
+        attempts=$((attempts - 1))
+        [ "$attempts" -gt 0 ] || break
+        sleep 1
+    done
+
+    echo "Сеть OPNsense не стала готова: стабильный default interface отсутствует."
+    return 1
+}
+
+ensure_log_path() {
+    install -d -o root -g wheel -m 750 "$logdir" || return 1
+    touch "$logfile" || return 1
+    chown root:wheel "$logfile" || return 1
+    chmod 640 "$logfile" || return 1
+}
+
+remove_stale_pidfile() {
+    [ -f "$pidfile" ] || return 0
+    rm -f "$pidfile"
+}
+
+reload_firewall() {
+    if ! command -v configctl >/dev/null 2>&1; then
+        echo "Не удалось применить правила firewall: configctl недоступен."
+        return 1
+    fi
+    configctl filter reload >/dev/null 2>&1
+}
+
+restore_system_resolver() {
+    if [ ! -x "$php_binary" ] || [ ! -r "$system_resolver_helper" ]; then
+        echo "Восстановление системного resolver OPNsense недоступно."
+        return 1
+    fi
+
+    resolver_output=""
+    if resolver_output="$(
+        "$php_binary" "$system_resolver_helper" 2>&1
+    )"; then
+        [ -z "$resolver_output" ] || echo "$resolver_output"
+        return 0
+    fi
+
+    [ -z "$resolver_output" ] || echo "$resolver_output"
+    return 1
+}
+
+wait_for_policy_readiness() {
+    readiness_pid="$1"
+    [ -f "$managed_policy" ] || return 0
+
+    if [ ! -x "$php_binary" ] || [ ! -r "$policy_readiness_helper" ]; then
+        echo "Проверка readiness DNS listener недоступна."
+        return 1
+    fi
+
+    attempts="${policy_readiness_attempts:-15}"
+    case "$attempts" in
+        ''|*[!0-9]*|0) attempts=15 ;;
+    esac
+
+    readiness_output=""
+    while [ "$attempts" -gt 0 ]; do
+        if readiness_output="$(
+            "$php_binary" "$policy_readiness_helper" --plan "$policy_plan" --pid "$readiness_pid" 2>&1
+        )"; then
+            return 0
+        else
+            readiness_status=$?
+        fi
+
+        if [ "$readiness_status" -ne 75 ]; then
+            [ -z "$readiness_output" ] || echo "$readiness_output"
+            return 1
+        fi
+        if ! process_is_sing_box "$readiness_pid"; then
+            echo "Процесс sing-box завершился во время проверки readiness DNS listener."
+            return 1
+        fi
+
+        attempts=$((attempts - 1))
+        [ "$attempts" -gt 0 ] || break
+        sleep 1
+    done
+
+    [ -z "$readiness_output" ] || echo "$readiness_output"
+    echo "DNS listener sing-box не стал готов до firewall-активации."
+    return 1
+}
+
+activate_policy_rules() {
+    if [ -f "$managed_policy" ] && [ -r "$policy_plan" ]; then
+        policy_pid="${1:-}"
+        case "$policy_pid" in
+            ''|*[!0-9]*)
+                echo "Не удалось подтвердить PID sing-box перед firewall-активацией."
+                return 1
+                ;;
+        esac
+        if ! wait_for_policy_readiness "$policy_pid"; then
+            echo "Управляемые правила firewall не активированы: DNS listener не готов."
+            return 1
+        fi
+
+        policy_checksum="$(sha256 -q "$policy_plan" 2>/dev/null || true)"
+        if [ -z "$policy_checksum" ]; then
+            echo "Не удалось вычислить SHA-256 управляемого policy-плана."
+            return 1
+        fi
+
+        printf '%s\n' "$policy_checksum" > "$policy_active" || return 1
+        chmod 0600 "$policy_active" || {
+            rm -f "$policy_active"
+            return 1
+        }
+
+        echo "Активируются управляемые правила DNS redirect и policy routing..."
+        if ! reload_firewall; then
+            rm -f "$policy_active"
+            reload_firewall >/dev/null 2>&1 || true
+            echo "Не удалось активировать управляемые правила firewall."
+            return 1
+        fi
+
+        rm -f "$pending_filter_reload"
+        echo "Управляемые правила firewall активированы."
+        return 0
+    fi
+
+    rm -f "$policy_active"
+    if [ -f "$pending_filter_reload" ]; then
+        echo "Применяются отложенные изменения firewall..."
+        if ! reload_firewall; then
+            echo "Не удалось применить отложенные изменения firewall."
+            return 1
+        fi
+        rm -f "$pending_filter_reload"
+        echo "Отложенные изменения firewall применены."
+    fi
+    return 0
+}
+
+deactivate_policy_rules() {
+    [ -f "$policy_active" ] || return 0
+
+    active_checksum="$(cat "$policy_active" 2>/dev/null || true)"
+    rm -f "$policy_active"
+    echo "Отключаются управляемые правила DNS redirect и policy routing..."
+    if ! reload_firewall; then
+        if [ -n "$active_checksum" ]; then
+            printf '%s\n' "$active_checksum" > "$policy_active" 2>/dev/null || true
+            chmod 0600 "$policy_active" 2>/dev/null || true
+        fi
+        echo "Не удалось безопасно отключить управляемые правила firewall."
+        return 1
+    fi
+
+    echo "Управляемые правила firewall отключены."
+    return 0
+}
+
+cleanup_failed_start() {
+    pid="$1"
+
+    deactivate_policy_rules >/dev/null 2>&1 || true
+
+    if process_is_sing_box "$pid"; then
+        kill "$pid" 2>/dev/null || true
+        if ! wait_for_exit "$pid" 5; then
+            kill -KILL "$pid" 2>/dev/null || true
+            wait_for_exit "$pid" 2 || true
+        fi
+    fi
+
+    remove_stale_pidfile
+}
+
+sing_box_start() {
+    echo "Запуск sing-box..."
+
+    if [ -f "$setup_required" ]; then
+        echo "Запуск sing-box отклонён: первоначальная настройка не завершена."
+        return 1
+    fi
+
+    if ! ensure_log_path; then
+        echo "Не удалось подготовить файл журнала: $logfile"
+        return 1
+    fi
+
+    tun_interface="$(configured_tun_interface)"
+
+    if [ -f "$pidfile" ]; then
+        existing_pid="$(read_pid || true)"
+        if [ -n "$existing_pid" ] && process_is_sing_box "$existing_pid"; then
+            if ! ifconfig "$tun_interface" >/dev/null 2>&1; then
+                echo "Процесс sing-box уже запущен, но интерфейс $tun_interface отсутствует."
+                return 1
+            fi
+            if ! restore_system_resolver; then
+                echo "Служба sing-box запущена, но системный resolver OPNsense не восстановлен."
+                return 1
+            fi
+            if ! activate_policy_rules "$existing_pid"; then
+                echo "Служба sing-box запущена, но управляемые правила firewall не активированы."
+                return 1
+            fi
+            echo "Служба sing-box уже запущена, PID $existing_pid."
+            return 0
+        fi
+
+        if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
+            echo "Устаревший PID-файл указывал на другой процесс; PID-файл удалён."
+        else
+            echo "Устаревший PID-файл удалён."
+        fi
+        remove_stale_pidfile
+    fi
+
+    if service mihomo status >/dev/null 2>&1; then
+        echo "Запуск sing-box отклонён: mihomo уже использует прозрачную маршрутизацию."
+        return 1
+    fi
+
+    if [ ! -x "$command" ] || [ ! -f "$config" ]; then
+        echo "Исполняемый файл sing-box или рабочая конфигурация отсутствуют."
+        return 1
+    fi
+
+    if ! wait_for_network_readiness; then
+        echo "Запуск sing-box отклонён: сеть OPNsense не стала готова."
+        return 1
+    fi
+
+    if ! "$command" check -c "$config" >> "$logfile" 2>&1; then
+        echo "Конфигурация sing-box не прошла проверку."
+        return 1
+    fi
+
+    nohup "$command" run -c "$config" >> "$logfile" 2>&1 &
+    started_pid=$!
+    printf '%s\n' "$started_pid" > "$pidfile"
+    chmod 0600 "$pidfile"
+
+    sleep 1
+    if ! process_is_sing_box "$started_pid"; then
+        echo "Процесс sing-box завершился во время запуска."
+        cleanup_failed_start "$started_pid"
+        return 1
+    fi
+
+    timeout=20
+    while [ "$timeout" -gt 0 ]; do
+        if ifconfig "$tun_interface" >/dev/null 2>&1; then
+            break
+        fi
+        if ! process_is_sing_box "$started_pid"; then
+            echo "Процесс sing-box завершился до создания $tun_interface."
+            cleanup_failed_start "$started_pid"
+            return 1
+        fi
+        sleep 1
+        timeout=$((timeout - 1))
+    done
+
+    if ! ifconfig "$tun_interface" >/dev/null 2>&1; then
+        echo "Интерфейс $tun_interface не был создан за 20 секунд; запуск отменён."
+        cleanup_failed_start "$started_pid"
+        return 1
+    fi
+
+    if ! restore_system_resolver; then
+        echo "Служба sing-box оставлена запущенной, но системный resolver OPNsense не восстановлен."
+        echo "Управляемые правила firewall не активированы."
+        return 1
+    fi
+
+    if ! activate_policy_rules "$started_pid"; then
+        echo "Запуск sing-box отменён: управляемые правила firewall не активированы."
+        cleanup_failed_start "$started_pid"
+        return 1
+    fi
+
+    echo "Служба запущена, PID $started_pid."
+}
+
+sing_box_stop() {
+    echo "Остановка sing-box..."
+
+    if ! deactivate_policy_rules; then
+        echo "Остановка sing-box отменена: правила firewall не удалось безопасно отключить."
+        return 1
+    fi
+
+    if [ ! -f "$pidfile" ]; then
+        echo "Служба sing-box не запущена: PID-файл отсутствует."
+        return 0
+    fi
+
+    pid="$(read_pid || true)"
+    if [ -z "$pid" ]; then
+        echo "Некорректный PID-файл удалён."
+        remove_stale_pidfile
+        return 0
+    fi
+
+    if ! kill -0 "$pid" 2>/dev/null; then
+        echo "Устаревший PID-файл удалён."
+        remove_stale_pidfile
+        return 0
+    fi
+
+    if ! process_is_sing_box "$pid"; then
+        proc_comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+        echo "PID-файл указывал на другой процесс и был удалён: $pid (${proc_comm:-неизвестно})."
+        remove_stale_pidfile
+        return 0
+    fi
+
+    if kill "$pid" && wait_for_exit "$pid" 10; then
+        remove_stale_pidfile
+        echo "Служба остановлена."
+        return 0
+    fi
+
+    echo "Превышено время ожидания остановки sing-box."
+    return 1
+}
+
+sing_box_status() {
+    if [ ! -f "$pidfile" ]; then
+        echo "Служба sing-box не запущена."
+        return 1
+    fi
+
+    pid="$(read_pid || true)"
+    if [ -z "$pid" ]; then
+        echo "PID-файл sing-box некорректен."
+        return 1
+    fi
+
+    if process_is_sing_box "$pid"; then
+        tun_interface="$(configured_tun_interface)"
+        if ! ifconfig "$tun_interface" >/dev/null 2>&1; then
+            echo "Процесс sing-box работает, но интерфейс $tun_interface отсутствует."
+            return 1
+        fi
+        echo "Служба sing-box работает, PID $pid."
+        return 0
+    fi
+
+    if kill -0 "$pid" 2>/dev/null; then
+        proc_comm="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+        echo "PID-файл sing-box указывает на другой процесс: $pid (${proc_comm:-неизвестно})."
+    else
+        echo "PID-файл найден, но процесс sing-box не работает."
+    fi
+    return 1
+}
+
+run_rc_command "$1"

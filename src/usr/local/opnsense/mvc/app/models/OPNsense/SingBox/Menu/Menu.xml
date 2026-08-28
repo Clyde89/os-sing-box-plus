@@ -1,0 +1,8 @@
+<menu>
+    <VPN>
+        <ProxySuite VisibleName="Прокси" cssClass="fa fa-lock fa-fw">
+            <SingBox VisibleName="sing-box" order="30" url="/ui/singbox/settings"/>
+            <SingBoxExpert VisibleName="sing-box: Служба и экспертный JSON" order="31" url="/sing-box.php"/>
+        </ProxySuite>
+    </VPN>
+</menu>

@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/local/sbin/sing-box-readiness --event startup

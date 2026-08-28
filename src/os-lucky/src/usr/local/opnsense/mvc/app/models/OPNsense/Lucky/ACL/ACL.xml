@@ -1,8 +1,0 @@
-<acl>
-    <page-services-lucky>
-        <name>Services: Lucky</name>
-        <patterns>
-            <pattern>lucky.php*</pattern>
-        </patterns>
-    </page-services-lucky>
-</acl>

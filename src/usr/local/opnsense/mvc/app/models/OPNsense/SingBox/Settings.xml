@@ -1,0 +1,111 @@
+<model>
+    <mount>//OPNsense/SingBox/settings</mount>
+    <description>Структурированные настройки sing-box</description>
+    <version>1.5.0</version>
+    <items>
+        <capture>
+            <mode type="OptionField">
+                <Default>selected</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <selected>Только выбранные клиенты</selected>
+                    <all_lan>Весь локальный трафик</all_lan>
+                </OptionValues>
+            </mode>
+            <interfaces type=".\CaptureInterfaceField">
+                <Multiple>Y</Multiple>
+                <filters>
+                    <enable>/^(?!0).*$/</enable>
+                </filters>
+            </interfaces>
+            <clients type=".\ClientListField"/>
+        </capture>
+        <dns>
+            <listenAddress type="NetworkField">
+                <Default>127.0.0.1</Default>
+                <Required>Y</Required>
+                <NetMaskAllowed>N</NetMaskAllowed>
+                <WildcardEnabled>N</WildcardEnabled>
+            </listenAddress>
+            <listenPort type="PortField">
+                <Default>55353</Default>
+                <Required>Y</Required>
+            </listenPort>
+            <redirectDomains type=".\DomainListField"/>
+            <fakeIpRange type=".\FakeIpRangeField">
+                <Default>198.18.0.0/15</Default>
+                <Required>Y</Required>
+            </fakeIpRange>
+            <policyUpstreamType type="OptionField">
+                <Default>https</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <https>DNS over HTTPS</https>
+                </OptionValues>
+            </policyUpstreamType>
+            <policyUpstreamAddress type="NetworkField">
+                <Required>N</Required>
+                <NetMaskAllowed>N</NetMaskAllowed>
+                <WildcardEnabled>N</WildcardEnabled>
+            </policyUpstreamAddress>
+            <policyUpstreamPort type="PortField">
+                <Default>443</Default>
+                <Required>Y</Required>
+            </policyUpstreamPort>
+            <policyUpstreamTlsServerName type="TextField">
+                <Required>N</Required>
+                <Mask>/^[A-Za-z0-9.-]{1,253}$/</Mask>
+                <ValidationMessage>Укажите корректное TLS-имя DNS-сервера.</ValidationMessage>
+            </policyUpstreamTlsServerName>
+            <policyUpstreamPath type="TextField">
+                <Default>/dns-query</Default>
+                <Required>Y</Required>
+                <Mask>/^\/[A-Za-z0-9._~%\/-]*$/</Mask>
+                <ValidationMessage>Путь DoH должен начинаться с символа / и не содержать пробелов.</ValidationMessage>
+            </policyUpstreamPath>
+        </dns>
+        <policy>
+            <outboundMode type="OptionField">
+                <Default>direct_bind</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <direct_bind>Прямой выход с привязкой IPv4</direct_bind>
+                </OptionValues>
+            </outboundMode>
+            <bindAddress type="NetworkField">
+                <Required>N</Required>
+                <NetMaskAllowed>N</NetMaskAllowed>
+                <WildcardEnabled>N</WildcardEnabled>
+            </bindAddress>
+            <gateway type="JsonKeyValueStoreField">
+                <Required>N</Required>
+                <ConfigdPopulateAct>interface gateways list -l</ConfigdPopulateAct>
+                <ValidationMessage>Выберите доступный IPv4 gateway для policy routing.</ValidationMessage>
+            </gateway>
+        </policy>
+        <tun>
+            <interfaceName type="TextField">
+                <Default>tun_singbox</Default>
+                <Required>Y</Required>
+                <Mask>/^[A-Za-z0-9_.-]{1,15}$/</Mask>
+                <ValidationMessage>Имя TUN-интерфейса должно содержать от 1 до 15 латинских букв, цифр, точек, дефисов или символов подчёркивания.</ValidationMessage>
+            </interfaceName>
+            <address type="NetworkField">
+                <Default>172.19.0.1/30</Default>
+                <Required>Y</Required>
+                <NetMaskRequired>Y</NetMaskRequired>
+                <WildcardEnabled>N</WildcardEnabled>
+                <ValidationMessage>Укажите корректный адрес TUN-интерфейса с префиксом сети.</ValidationMessage>
+            </address>
+            <stack type="OptionField">
+                <Default>system</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <system>system</system>
+                    <gvisor>gVisor</gvisor>
+                    <mixed>mixed</mixed>
+                </OptionValues>
+            </stack>
+        </tun>
+    </items>
+</model>

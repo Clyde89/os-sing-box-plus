@@ -1,0 +1,393 @@
+name: Проверки репозитория
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  repository-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Проверка структуры
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f build.sh
+          test -f .github/workflows/freebsd-package.yml
+          test -d src
+          test -d packaging/freebsd
+          test -d tests
+          test -f tests/readiness-gating.sh
+          test -f tests/migrate-legacy.sh
+          test -f tests/migrate-legacy-cases.sh
+          test -f tests/service-lifecycle-static.sh
+          test -f tests/service-policy-lifecycle.sh
+          test -f tests/service-readiness-lifecycle.sh
+          test -f tests/policy-readiness.sh
+          test -f tests/package-install-static.sh
+          test -f tests/package-lifecycle.sh
+          test -f tests/package-artifact-static.sh
+          test -f tests/package-artifact.sh
+          test -f tests/system-resolver.sh
+          test -x tests/freebsd-package-upgrade.sh
+          test -x tests/opnsense-regression.sh
+          test -f docs/RELEASE-CHECKLIST.md
+          grep -Fq 'release: "15.1"' .github/workflows/freebsd-package.yml
+          grep -Fq 'vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1' .github/workflows/freebsd-package.yml
+          grep -Fq 'make package' .github/workflows/freebsd-package.yml
+          grep -Fq 'pkg info -F dist/os-sing-box.pkg' .github/workflows/freebsd-package.yml
+          grep -Fq 'tests/freebsd-package-upgrade.sh dist/os-sing-box.pkg' .github/workflows/freebsd-package.yml
+          grep -Fq 'actions/upload-artifact@v4' .github/workflows/freebsd-package.yml
+          test -f tests/webui-safety-static.sh
+          test -f tests/service-config.sh
+          test -f tests/log-control.sh
+          test -f tests/selection-validator.php
+          test -f tests/network-preflight-validator.php
+          test -f tests/selector-compiler.php
+          test -f tests/policy-plan-validator.php
+          test -f tests/policy-plan-builder.php
+          test -f tests/firewall-rule-builder.php
+          test -f tests/firewall-registration.php
+          test -f tests/firewall-anchor-static.sh
+          test -f tests/runtime-config-builder.php
+          test -f tests/runtime-config-apply-static.sh
+          test -f tests/runtime-config-transaction.sh
+          test -f tests/mvc-settings-ui-static.sh
+          test -f tests/stubs/config.inc
+          test -f tests/stubs/runtime/config.inc
+          test -f packaging/freebsd/+PRE_INSTALL
+          test -f src/usr/local/etc/sing-box/config.json.sample
+          test -f src/usr/local/etc/sing-box/readiness.conf.sample
+          test -f src/usr/local/etc/rc.syshook.d/start/70-sing-box-readiness
+          test -x src/usr/local/sbin/sing-box-readiness
+          test -x src/usr/local/sbin/sing-box-service-config
+          test -x src/usr/local/sbin/sing-box-logctl
+          test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
+          test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
+          test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php
+          test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/DomainListField.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/ClientListField.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/CaptureInterfaceField.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/FakeIpRangeField.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/SelectorCompiler.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanValidator.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/NetworkPreflightValidator.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/FirewallRuleBuilder.php
+          test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
+          test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/SettingsController.php
+          test -f src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          test -f src/usr/local/opnsense/mvc/app/views/OPNsense/SingBox/settings.volt
+          test -f src/usr/local/share/licenses/os-sing-box/LICENSE.plugin
+          test -f src/usr/local/share/licenses/os-sing-box/LICENSE.opnsense
+          test -f src/usr/local/share/licenses/os-sing-box/LICENSE.sing-box
+          test ! -e src/usr/local/etc/sing-box/config.json
+          test ! -e src/usr/local/etc/sing-box/readiness.conf
+          test ! -e src/usr/bin/sing_box_sub
+          test ! -e src/usr/local/www/sing-box_sub.php
+          test ! -e src/usr/local/www/sing-box_sub_log.php
+          grep -q 'VERSION="${VERSION:-1.1.0}"' build.sh
+          grep -q '^VERSION?=[[:space:]]*1\.1\.0$' Makefile
+          grep -q 'SING_BOX_RELEASE=.*v1.13.13-vincent' build.sh
+          grep -q 'SING_BOX_ASSET_SHA256=.*3ba254d792964cd1005946354e0c8250a05955381bdcbd19f57265a339b199d7' build.sh
+          grep -q 'SING_BOX_SHA256=.*1da7e84757a5ff5d13d4154b4e4055ea5f99d069c2423687fe8165bf504be7d0' build.sh
+          grep -q 'categories: \[ "net" \]' build.sh
+          grep -q 'licenselogic: "multi"' build.sh
+          grep -q 'licenses: \[ "MIT", "BSD2CLAUSE", "GPLv3+" \]' build.sh
+          grep -q 'Базовая конфигурация проверена sing-box' build.sh
+          grep -q 'Runtime/SelectorCompiler.php' build.sh
+          grep -q 'Runtime/PolicyPlanBuilder.php' build.sh
+          grep -q 'Runtime/PolicyPlanValidator.php' build.sh
+          grep -q 'policy_readiness.php' build.sh
+          grep -q 'Runtime/FirewallRuleBuilder.php' build.sh
+          grep -q 'FieldTypes/CaptureInterfaceField.php' build.sh
+          grep -q 'FieldTypes/FakeIpRangeField.php' build.sh
+          grep -q '^SING_BOX_READINESS_ENABLE="NO"$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^SING_BOX_READINESS_SOURCE_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^SING_BOX_READINESS_UNDERLAY_IP=""$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^SING_BOX_READINESS_POLICY_SUFFIX=""$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^SING_BOX_READINESS_E2E_NAME=""$' src/usr/local/etc/sing-box/readiness.conf.sample
+          grep -q '^legacy_layout_present()' packaging/freebsd/+PRE_INSTALL
+          grep -Fq '/usr/local/www/services_sing_box.php' packaging/freebsd/+PRE_INSTALL
+          grep -Fq 'pre-install.complete' packaging/freebsd/+PRE_INSTALL
+          if grep -Eq '(^|[[:space:]])pkg[[:space:]]+(query|version)([[:space:]]|$)' packaging/freebsd/+PRE_INSTALL; then
+            echo 'PRE-INSTALL рекурсивно запускал pkg внутри package-транзакции' >&2
+            exit 1
+          fi
+          grep -q 'config.xml.legacy' packaging/freebsd/+PRE_INSTALL
+          grep -Fq 'PRE-INSTALL не подтвердил завершение сохранения исходного состояния' packaging/freebsd/+POST_INSTALL
+          grep -q 'migrate_legacy.php' packaging/freebsd/+POST_INSTALL
+          grep -q '762b3ec8-79c2-48b4-9793-c653bb3d2265' src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
+          grep -q '"product_version":"1.1.0"' src/usr/local/opnsense/version/sing-box
+          grep -Fq '<interfaces type=".\CaptureInterfaceField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -Fq '<clients type=".\ClientListField"/>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -Fq '<redirectDomains type=".\DomainListField"/>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -Fq '<fakeIpRange type=".\FakeIpRangeField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<Default>198.18.0.0/15</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<version>1.5.0</version>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<ConfigdPopulateAct>interface gateways list -l</ConfigdPopulateAct>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<policyUpstreamAddress type="NetworkField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<policyUpstreamPort type="PortField">' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<Default>selected</Default>' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
+          grep -q '<id>settings.capture.interfaces</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q '<id>settings.capture.clients</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q '<id>settings.dns.redirectDomains</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q '<id>settings.dns.fakeIpRange</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q '<id>settings.dns.policyUpstreamAddress</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q '<id>settings.dns.policyUpstreamTlsServerName</id>' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/forms/settings.xml
+          grep -q 'validateCaptureInterfaces' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
+          grep -q 'validateIpv4Network' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Validation/SelectionValidator.php
+          grep -q 'function previewAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          grep -q 'function applyAction' src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          grep -q "'policy_plan'" src/usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
+          grep -q "'policy_plan'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
+          grep -q 'fakeip-dns' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
+          grep -q 'PolicyPlanBuilder::build' src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
+          grep -q "'schema_version'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
+          grep -q "'capture_interfaces'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
+          grep -q "'operations'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
+          grep -q "'dns_redirect'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
+          grep -q "'fakeip_route'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/PolicyPlanBuilder.php
+          grep -q "'apply_ready'" src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/RuntimeConfigBuilder.php
+          grep -q 'Validation/SelectionValidator.php' src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
+          grep -q 'Runtime/SelectorCompiler.php' src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
+          grep -q 'Runtime/PolicyPlanBuilder.php' src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
+          grep -q 'Runtime/NetworkPreflightValidator.php' src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
+          grep -q '^\[apply\]$' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
+          grep -q 'runtime_config.php apply' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
+          grep -q '^\[preflight\]$' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
+          grep -q 'runtime_config.php preflight' src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
+          grep -Fq 'chmod 0755 "$STAGEDIR/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php"' build.sh
+          if grep -q '/releases/latest/' build.sh; then
+            echo 'Обнаружена плавающая ссылка releases/latest' >&2
+            exit 1
+          fi
+          if grep -q 'origin: "ftp/curl"' build.sh; then
+            echo 'Обнаружена лишняя runtime-зависимость пакета от curl' >&2
+            exit 1
+          fi
+
+      - name: Проверка JSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          paths = sorted(set(Path('src').rglob('*.json')) | set(Path('src').rglob('*.json.sample')))
+          for path in paths:
+              with path.open('r', encoding='utf-8') as fh:
+                  json.load(fh)
+              print(f'OK {path}')
+          PY
+
+      - name: Проверка XML
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          for path in sorted(Path('src').rglob('*.xml')):
+              ET.parse(path)
+              print(f'OK {path}')
+          PY
+
+      - name: Проверка shell-скриптов
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh -n build.sh
+          sh -n src/usr/local/etc/sing-box/readiness.conf.sample
+          while IFS= read -r -d '' file; do
+            sh -n "$file"
+            echo "OK $file"
+          done < <(find src packaging tests -type f \( -name '*.sh' -o -path '*/rc.d/*' -o -path '*/rc.syshook.d/*' -o -path '*/sbin/sing-box-readiness' -o -path '*/sbin/sing-box-service-config' -o -path '*/sbin/sing-box-logctl' -o -name '+PRE_INSTALL' -o -name '+POST_INSTALL' -o -name '+PRE_DEINSTALL' -o -name '+POST_DEINSTALL' \) -print0)
+
+      - name: Проверка защит жизненного цикла службы
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/service-lifecycle-static.sh
+
+      - name: Проверка отката policy-правил firewall
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/service-policy-lifecycle.sh
+
+      - name: Проверка readiness-gating перед firewall
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/service-readiness-lifecycle.sh
+
+      - name: Проверка безопасного состояния установки пакета
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/package-install-static.sh
+
+      - name: Проверка установки и legacy-обновления пакета
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/package-lifecycle.sh
+
+      - name: Проверка выпускного шлюза пакета и OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/package-artifact-static.sh
+
+      - name: Проверка безопасности первоначальной настройки WebUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/webui-safety-static.sh
+
+      - name: Проверка управления автозапуском sing-box
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/service-config.sh
+
+      - name: Проверка безопасного управления журналом sing-box
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/log-control.sh
+
+      - name: Проверка безопасного отключения восстановления
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests/readiness-gating.sh
+
+      - name: Проверка миграции legacy-объектов OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/migrate-legacy.sh
+          sh tests/migrate-legacy-cases.sh
+
+      - name: Проверка структурированного WebUI настроек
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/mvc-settings-ui-static.sh
+
+      - name: Установка инструментов проверки
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y php-cli libarchive-tools
+
+      - name: Проверка готового package-артефакта
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/package-artifact.sh
+
+      - name: Проверка PHP
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            php -l "$file"
+          done < <(find src tests -type f -name '*.php' -print0)
+
+      - name: Проверка восстановления системного resolver OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/system-resolver.sh
+
+      - name: Проверка валидации доменов, клиентов и интерфейсов
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/selection-validator.php
+
+      - name: Проверка компиляции policy-селекторов
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/selector-compiler.php
+
+      - name: Проверка сетевого preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/network-preflight-validator.php
+
+      - name: Проверка декларативного policy-плана OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/policy-plan-builder.php
+
+      - name: Проверка fail-closed валидации policy-плана
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/policy-plan-validator.php
+
+      - name: Проверка TCP/UDP readiness DNS listener
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/policy-readiness.sh
+
+      - name: Проверка генерации firewall-правил OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/firewall-rule-builder.php
+
+      - name: Проверка fail-closed при недоступном gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/firewall-registration.php
+
+      - name: Проверка предварительного рендера runtime-конфигурации
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tests/runtime-config-builder.php
+
+      - name: Проверка безопасного применения runtime-конфигурации
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/runtime-config-apply-static.sh
+
+      - name: Проверка транзакционного Apply и rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/runtime-config-transaction.sh
+
+      - name: Проверка регистрации firewall-правил OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/firewall-anchor-static.sh

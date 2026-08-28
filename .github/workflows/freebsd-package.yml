@@ -1,0 +1,50 @@
+name: Сборка FreeBSD-пакета
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - develop
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  freebsd-package:
+    name: FreeBSD 15.1 package
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Сборка в FreeBSD 15.1
+        uses: vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1
+        with:
+          release: "15.1"
+          sync: rsync
+          copyback: true
+          run: |
+            set -eu
+            freebsd-version
+            uname -m
+            make clean
+            make package
+            pkg info -F dist/os-sing-box.pkg
+            test -s dist/os-sing-box.pkg
+            tests/freebsd-package-upgrade.sh dist/os-sing-box.pkg
+            sha256 dist/os-sing-box.pkg | tee dist/os-sing-box.pkg.sha256
+
+      - name: Публикация проверенного package-артефакта
+        uses: actions/upload-artifact@v4
+        with:
+          name: os-sing-box-freebsd-15.1
+          path: |
+            dist/os-sing-box.pkg
+            dist/os-sing-box.pkg.sha256
+          if-no-files-found: error
+          retention-days: 14
