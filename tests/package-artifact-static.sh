@@ -25,6 +25,9 @@ grep -Fq 'usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php' "$BUI
 grep -Fq 'verify_package_artifact "$DISTDIR/$OUTPUT_NAME"' "$BUILD_SCRIPT"
 grep -Fq 'verify_sha256 \' "$BUILD_SCRIPT"
 grep -Fq 'package-archive-list' "$BUILD_SCRIPT"
+grep -Fq 'chown -R root:wheel "$PKGROOT"' "$BUILD_SCRIPT"
+grep -Fq "stat -f '%Su:%Sg'" "$BUILD_SCRIPT"
+grep -Fq 'вместо root:wheel' "$BUILD_SCRIPT"
 grep -Fq 'пакет не должен владеть пользовательской runtime-конфигурацией' "$BUILD_SCRIPT"
 
 grep -Fq 'Только чтение' "$REGRESSION_SCRIPT"

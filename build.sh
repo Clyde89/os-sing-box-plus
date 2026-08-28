@@ -288,6 +288,16 @@ EOF
     fi
 
     tar -xzf "$package_file" -C "$verify_root"
+
+    if [ "$(uname -s)" = "FreeBSD" ]; then
+        while IFS= read -r archive_path; do
+            [ -n "$archive_path" ] || continue
+            archive_owner="$(stat -f '%Su:%Sg' "$verify_root/$archive_path")"
+            [ "$archive_owner" = "root:wheel" ] \
+                || die "файл /$archive_path внутри пакета имел владельца $archive_owner вместо root:wheel"
+        done < "$archive_list"
+    fi
+
     verify_embedded_lifecycle \
         "$verify_root/+MANIFEST" \
         pre-install \
@@ -413,6 +423,11 @@ mkdir -p "$PKGROOT"
 install -m 0644 "$METADIR/+COMPACT_MANIFEST" "$PKGROOT/+COMPACT_MANIFEST"
 install -m 0644 "$METADIR/+MANIFEST" "$PKGROOT/+MANIFEST"
 copy_tree "$STAGEDIR" "$PKGROOT"
+if [ "$(uname -s)" = "FreeBSD" ]; then
+    [ "$(id -u)" -eq 0 ] \
+        || die "FreeBSD package должен был собираться с правами root"
+    chown -R root:wheel "$PKGROOT"
+fi
 {
     printf '%s\n' '+COMPACT_MANIFEST' '+MANIFEST'
     find "$PKGROOT" -type f ! -name '+COMPACT_MANIFEST' ! -name '+MANIFEST' |

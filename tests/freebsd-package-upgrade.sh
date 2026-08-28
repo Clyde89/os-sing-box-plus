@@ -117,6 +117,16 @@ grep -Fq 'Восстанавливается пользовательская к
 grep -Fqx 'sing_box_enable="NO"' /etc/rc.conf.d/sing_box \
     || fail "состояние автозапуска не сохранилось"
 
+for package_owned_file in \
+    /usr/local/bin/sing-box \
+    /usr/local/etc/rc.d/sing-box \
+    /usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php \
+    /usr/local/share/os-sing-box/build-info
+do
+    [ "$(stat -f '%Su:%Sg' "$package_owned_file")" = "root:wheel" ] \
+        || fail "package-owned файл имел владельца, отличного от root:wheel: $package_owned_file"
+done
+
 if pkg which -q /usr/local/etc/sing-box/config.json >/dev/null 2>&1; then
     fail "после обновления пользовательский config.json остался package-owned"
 fi
