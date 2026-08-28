@@ -61,7 +61,7 @@ REGRESSION_EXPECTED_EGRESS_IP="198.51.100.10" \
 tests/opnsense-regression.sh --stage post-reboot --require-managed --network
 ```
 
-Дополнительно подтверждались отсутствие ручного вмешательства в запуск sing-box, наличие TUN, совпадение активного SHA-256 policy-плана и принадлежность TCP/UDP DNS listener текущему PID.
+Дополнительно подтверждались отсутствие ручного вмешательства в запуск sing-box, наличие TUN, совпадение активного SHA-256 policy-плана и принадлежность TCP/UDP DNS listener текущему PID. Системный `/etc/resolv.conf` должен был быть создан штатным `system_resolvconf_generate()`, иметь режим `0644`, содержать хотя бы один nameserver и не зависеть от TUN sing-box.
 
 ## 5. WAN flap
 

@@ -37,6 +37,7 @@ jobs:
           test -f tests/package-lifecycle.sh
           test -f tests/package-artifact-static.sh
           test -f tests/package-artifact.sh
+          test -f tests/system-resolver.sh
           test -x tests/freebsd-package-upgrade.sh
           test -x tests/opnsense-regression.sh
           test -f docs/RELEASE-CHECKLIST.md
@@ -73,6 +74,7 @@ jobs:
           test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/migrate_legacy.php
           test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
           test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php
+          test -f src/usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.php
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Settings.xml
           test -f src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/FieldTypes/DomainListField.php
@@ -311,6 +313,12 @@ jobs:
           while IFS= read -r -d '' file; do
             php -l "$file"
           done < <(find src tests -type f -name '*.php' -print0)
+
+      - name: Проверка восстановления системного resolver OPNsense
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tests/system-resolver.sh
 
       - name: Проверка валидации доменов, клиентов и интерфейсов
         shell: bash

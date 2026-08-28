@@ -102,6 +102,10 @@ printf '%s\n' "$BUILD_INFO" | grep -Fxq 'core_release=v0.0.0-test'
 printf '%s\n' "$BUILD_INFO" | grep -Fxq "core_asset_sha256=$ASSET_SHA256"
 printf '%s\n' "$BUILD_INFO" | grep -Fxq "core_binary_sha256=$BINARY_SHA256"
 
+SYSTEM_RESOLVER_HELPER="$EXTRACT_DIR/usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php"
+[ -f "$SYSTEM_RESOLVER_HELPER" ]
+[ "$(stat -c '%a' "$SYSTEM_RESOLVER_HELPER")" = "755" ]
+
 if bsdtar -tf "$PACKAGE_FILE" | sed -e 's#^/##' | grep -Fxq 'usr/local/etc/sing-box/config.json'; then
     echo "Готовый пакет не должен владеть пользовательским config.json" >&2
     exit 1

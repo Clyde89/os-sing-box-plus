@@ -52,3 +52,4 @@
 - Добавлен read-only regression-шлюз upgrade, reboot, WAN flap, managed policy и E2E для OPNsense-стенда.
 - Зафиксирован обязательный выпускной checklist с проверками сохранности конфигурации, VPN egress и fail-closed.
 - Добавлена штатная сборка и публикация проверенного package-артефакта в FreeBSD 15.1.
+- Восстановлен штатный системный resolver OPNsense после создания TUN с проверкой результата и атомарным откатом при ошибке.

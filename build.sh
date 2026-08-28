@@ -52,6 +52,7 @@ need_file "src/usr/local/sbin/sing-box-service-config"
 need_file "src/usr/local/sbin/sing-box-logctl"
 need_file "src/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php"
 need_file "src/usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php"
+need_file "src/usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php"
 need_file "src/usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf"
 need_file "src/usr/local/etc/inc/plugins.inc.d/sing_box.inc"
 need_file "src/usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Menu/Menu.xml"
@@ -268,6 +269,7 @@ usr/local/etc/rc.d/sing-box
 usr/local/etc/sing-box/config.json.sample
 usr/local/etc/sing-box/readiness.conf.sample
 usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php
+usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php
 usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php
 usr/local/opnsense/mvc/app/models/OPNsense/SingBox/Runtime/NetworkPreflightValidator.php
 usr/local/opnsense/mvc/app/controllers/OPNsense/SingBox/Api/SettingsController.php
@@ -321,6 +323,8 @@ EOF
         || die "бинарный файл sing-box внутри пакета имеет небезопасный режим доступа"
     [ "$(stat -f '%Lp' "$verify_root/usr/local/share/os-sing-box/build-info")" = "644" ] \
         || die "сведения о сборке внутри пакета имеют некорректный режим доступа"
+    [ "$(stat -f '%Lp' "$verify_root/usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php")" = "755" ] \
+        || die "helper системного resolver внутри пакета имеет некорректный режим доступа"
 }
 
 verify_lifecycle_sources
@@ -346,6 +350,7 @@ chmod 0755 "$STAGEDIR/usr/local/sbin/sing-box-readiness"
 chmod 0755 "$STAGEDIR/usr/local/sbin/sing-box-service-config"
 chmod 0755 "$STAGEDIR/usr/local/sbin/sing-box-logctl"
 chmod 0755 "$STAGEDIR/usr/local/opnsense/scripts/OPNsense/SingBox/runtime_config.php"
+chmod 0755 "$STAGEDIR/usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php"
 chmod 0644 "$STAGEDIR/usr/local/share/licenses/os-sing-box/LICENSE.plugin"
 chmod 0644 "$STAGEDIR/usr/local/share/licenses/os-sing-box/LICENSE.opnsense"
 chmod 0644 "$STAGEDIR/usr/local/share/licenses/os-sing-box/LICENSE.sing-box"

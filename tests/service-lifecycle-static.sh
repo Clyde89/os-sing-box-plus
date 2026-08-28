@@ -21,6 +21,7 @@ last_line_of() {
 grep -q '^configured_tun_interface()' "$RC_SCRIPT"
 grep -q '^process_is_sing_box()' "$RC_SCRIPT"
 grep -q '^reload_firewall()' "$RC_SCRIPT"
+grep -q '^restore_system_resolver()' "$RC_SCRIPT"
 grep -q '^wait_for_policy_readiness()' "$RC_SCRIPT"
 grep -q '^activate_policy_rules()' "$RC_SCRIPT"
 grep -q '^deactivate_policy_rules()' "$RC_SCRIPT"
@@ -33,6 +34,7 @@ grep -Fq 'policy_plan="${state_dir}/policy-plan.json"' "$RC_SCRIPT"
 grep -Fq 'tun_interface_file="${state_dir}/tun-interface"' "$RC_SCRIPT"
 grep -Fq 'policy_active="/var/run/sing-box-policy-active"' "$RC_SCRIPT"
 grep -Fq 'policy_readiness_helper="/usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php"' "$RC_SCRIPT"
+grep -Fq 'system_resolver_helper="/usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php"' "$RC_SCRIPT"
 grep -Fq 'Запуск sing-box отклонён: первоначальная настройка не завершена.' "$RC_SCRIPT"
 grep -Fq 'cleanup_failed_start "$started_pid"' "$RC_SCRIPT"
 grep -Fq 'chmod 0600 "$pidfile"' "$RC_SCRIPT"
@@ -57,11 +59,15 @@ log_line="$(first_line_of 'if ! ensure_log_path; then')"
 [ "$setup_line" -lt "$log_line" ]
 
 interface_timeout_line="$(first_line_of 'Интерфейс $tun_interface не был создан за 20 секунд; запуск отменён.')"
+resolver_start_line="$(last_line_of 'if ! restore_system_resolver; then')"
+resolver_error_line="$(first_line_of 'Служба sing-box оставлена запущенной, но системный resolver OPNsense не восстановлен.')"
 activate_start_line="$(last_line_of 'if ! activate_policy_rules "$started_pid"; then')"
 activate_error_line="$(first_line_of 'Запуск sing-box отменён: управляемые правила firewall не активированы.')"
 activate_cleanup_line="$(last_line_of 'cleanup_failed_start "$started_pid"')"
 success_line="$(first_line_of 'echo "Служба запущена, PID $started_pid."')"
-[ "$interface_timeout_line" -lt "$activate_start_line" ]
+[ "$interface_timeout_line" -lt "$resolver_start_line" ]
+[ "$resolver_start_line" -lt "$resolver_error_line" ]
+[ "$resolver_error_line" -lt "$activate_start_line" ]
 [ "$activate_start_line" -lt "$activate_error_line" ]
 [ "$activate_error_line" -lt "$activate_cleanup_line" ]
 [ "$activate_cleanup_line" -lt "$success_line" ]

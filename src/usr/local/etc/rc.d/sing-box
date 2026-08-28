@@ -24,6 +24,7 @@ policy_plan="${state_dir}/policy-plan.json"
 tun_interface_file="${state_dir}/tun-interface"
 policy_active="/var/run/sing-box-policy-active"
 policy_readiness_helper="/usr/local/opnsense/scripts/OPNsense/SingBox/policy_readiness.php"
+system_resolver_helper="/usr/local/opnsense/scripts/OPNsense/SingBox/system_resolver.php"
 php_binary="/usr/local/bin/php"
 
 # shellcheck disable=SC2034
@@ -106,6 +107,24 @@ reload_firewall() {
         return 1
     fi
     configctl filter reload >/dev/null 2>&1
+}
+
+restore_system_resolver() {
+    if [ ! -x "$php_binary" ] || [ ! -r "$system_resolver_helper" ]; then
+        echo "Восстановление системного resolver OPNsense недоступно."
+        return 1
+    fi
+
+    resolver_output=""
+    if resolver_output="$(
+        "$php_binary" "$system_resolver_helper" 2>&1
+    )"; then
+        [ -z "$resolver_output" ] || echo "$resolver_output"
+        return 0
+    fi
+
+    [ -z "$resolver_output" ] || echo "$resolver_output"
+    return 1
 }
 
 wait_for_policy_readiness() {
@@ -260,6 +279,10 @@ sing_box_start() {
                 echo "Процесс sing-box уже запущен, но интерфейс $tun_interface отсутствует."
                 return 1
             fi
+            if ! restore_system_resolver; then
+                echo "Служба sing-box запущена, но системный resolver OPNsense не восстановлен."
+                return 1
+            fi
             if ! activate_policy_rules "$existing_pid"; then
                 echo "Служба sing-box запущена, но управляемые правила firewall не активированы."
                 return 1
@@ -320,6 +343,12 @@ sing_box_start() {
     if ! ifconfig "$tun_interface" >/dev/null 2>&1; then
         echo "Интерфейс $tun_interface не был создан за 20 секунд; запуск отменён."
         cleanup_failed_start "$started_pid"
+        return 1
+    fi
+
+    if ! restore_system_resolver; then
+        echo "Служба sing-box оставлена запущенной, но системный resolver OPNsense не восстановлен."
+        echo "Управляемые правила firewall не активированы."
         return 1
     fi
 
